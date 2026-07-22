@@ -1,0 +1,56 @@
+{% extends 'base.html' %}{% block title %}Escáner · RMS{% endblock %}{% block
+head %}
+<script
+  src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
+  defer
+></script>
+{% endblock %}{% block content %}
+<!-- Encabezado y acciones principales de la página -->
+<div class="heading">
+  <div>
+    <p class="eyebrow">REGISTRO DE ENTRADA</p>
+    <h1>Escáner QR</h1>
+    <p>Selecciona un evento abierto antes de comenzar.</p>
+  </div>
+</div>
+<!-- Contenido principal de la vista -->
+<section class="scanner-grid">
+  <article class="panel">
+    <label>
+      Evento activo
+      <select id="scanEvent">
+        <option value="">Seleccionar evento…</option>
+        {% for e in eventos %}
+        <option value="{{e.id}}">
+          {{e.nombre}} · {{e.fecha.strftime('%d/%m/%Y')}}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <div id="reader"></div>
+    <button class="button full" id="startScan" onclick="startScanner()">
+      Iniciar cámara
+    </button>
+    <p class="hint">
+      La cámara requiere HTTPS o localhost. Si deniegas el permiso, usa el
+      registro manual.
+    </p>
+  </article>
+  <article class="panel">
+    <h2>Registro manual</h2>
+    <form id="manualForm">
+      <label>
+        Código interno
+        <input
+          id="manualCode"
+          required
+          maxlength="30"
+          placeholder="Ej. DEMO-001"
+        />
+      </label>
+      <button class="button full">Registrar asistencia</button>
+    </form>
+    <div id="scanResult" class="result">Esperando un registro…</div>
+  </article>
+</section>
+{% endblock %}

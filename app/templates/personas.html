@@ -1,0 +1,121 @@
+{% extends 'base.html' %}{% block title %}Personas · RMS{% endblock %}{% block
+content %}
+<!-- Encabezado y acciones principales de la página -->
+<div class="heading">
+  <div>
+    <p class="eyebrow">ADMINISTRACIÓN</p>
+    <h1>Personas</h1>
+  </div>
+  <button class="button" onclick="openPerson()">+ Registrar persona</button>
+</div>
+<!-- Contenido principal de la vista -->
+<section class="panel">
+  <div class="filters">
+    <input
+      id="search"
+      placeholder="Buscar por nombre o código"
+      oninput="filterRows()"
+    />
+    <select id="status" onchange="filterRows()">
+      <option value="">Todos los estados</option>
+      <option value="activo">Activas</option>
+      <option value="inactivo">Inactivas</option>
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table id="people">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Persona</th>
+          <th>Sede / grupo</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in personas %}
+        <tr
+          data-search="{{p.codigo}} {{p.nombres}} {{p.apellidos}}"
+          data-status="{{'activo' if p.activo else 'inactivo'}}"
+        >
+          <td><b>{{p.codigo}}</b></td>
+          <td>
+            {{p.nombres}} {{p.apellidos}}
+            <small>{{p.correo or ''}}</small>
+          </td>
+          <td>
+            {{p.sede or '—'}}
+            <small>{{p.grupo or ''}}</small>
+          </td>
+          <td>
+            <span class="badge {{'abierto' if p.activo else 'cerrado'}}">
+              {{'Activa' if p.activo else 'Inactiva'}}
+            </span>
+          </td>
+          <td class="actions">
+            <button onclick="editPerson({{p.to_dict()|tojson}})">Editar</button>
+            <a href="/api/personas/{{p.id}}/qr" target="_blank">QR</a>
+            <button
+              onclick="togglePerson({{p.id}},{{'false' if p.activo else 'true'}})"
+            >
+              {{'Desactivar' if p.activo else 'Activar'}}
+            </button>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="empty">No hay personas registradas.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<!-- Formulario modal reutilizable para crear o editar -->
+<dialog id="personDialog">
+  <form id="personForm">
+    <div class="modal-head">
+      <h2 id="personTitle">Registrar persona</h2>
+      <button type="button" onclick="personDialog.close()">×</button>
+    </div>
+    <input type="hidden" id="pid" />
+    <div class="form-grid">
+      <label>
+        Código interno*
+        <input id="codigo" maxlength="30" required />
+      </label>
+      <label>
+        Nombres*
+        <input id="nombres" maxlength="80" required />
+      </label>
+      <label>
+        Apellidos*
+        <input id="apellidos" maxlength="80" required />
+      </label>
+      <label>
+        Correo
+        <input id="correo" type="email" maxlength="120" />
+      </label>
+      <label>
+        Teléfono
+        <input id="telefono" maxlength="25" />
+      </label>
+      <label>
+        Sede
+        <input id="sede" maxlength="80" />
+      </label>
+      <label>
+        Grupo
+        <input id="grupo" maxlength="80" />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="secondary" onclick="personDialog.close()">
+        Cancelar
+      </button>
+      <button class="button">Guardar</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}

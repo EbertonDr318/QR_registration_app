@@ -1,0 +1,45 @@
+{% extends 'base.html' %}{% block title %}Historial · RMS{% endblock %}{% block
+content %}
+<!-- Encabezado y acciones principales de la página -->
+<div class="heading">
+  <div>
+    <p class="eyebrow">REPORTES</p>
+    <h1>Historial de asistencia</h1>
+  </div>
+  <button class="button" onclick="exportCsv()">Exportar CSV</button>
+</div>
+<!-- Contenido principal de la vista -->
+<section class="panel">
+  <form id="attendanceFilters" class="filters">
+    <input name="q" placeholder="Persona o código" />
+    <select name="evento_id">
+      <option value="">Todos los eventos</option>
+      {% for e in eventos %}
+      <option value="{{e.id}}">{{e.nombre}}</option>
+      {% endfor %}
+    </select>
+    <input name="sede" placeholder="Sede" />
+    <input name="desde" type="date" />
+    <input name="hasta" type="date" />
+    <button class="button">Filtrar</button>
+  </form>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Persona</th>
+          <th>Evento</th>
+          <th>Fecha y hora</th>
+          <th>Método</th>
+        </tr>
+      </thead>
+      <tbody id="attendanceBody">
+        <tr>
+          <td colspan="5" class="empty">Cargando…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

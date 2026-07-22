@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{% block title %}Asistencia QR{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static',filename='css/app.css') }}"
+    />
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <!-- Navegación principal compartida por todas las vistas Flask -->
+    <header>
+      <a class="brand" href="/">
+        RMS
+        <span>Asistencia QR</span>
+      </a>
+      <button class="menu" aria-label="Abrir menú">☰</button>
+      <nav>
+        <a href="/">Dashboard</a>
+        <a href="/personas">Personas</a>
+        <a href="/eventos">Eventos</a>
+        <a href="/escaner">Escáner</a>
+        <a href="/asistencias">Historial</a>
+      </nav>
+    </header>
+    <!-- Cada plantilla hija inyecta aquí el contenido de su página -->
+    <main>{% block content %}{% endblock %}</main>
+
+    <!-- Contenedor global para mensajes de éxito y error -->
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="{{ url_for('static',filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

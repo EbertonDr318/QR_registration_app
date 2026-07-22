@@ -1,0 +1,381 @@
+/* Variables y estilos base de la aplicación Flask */
+:root {
+  --ink: #172033;
+  --muted: #667085;
+  --brand: #3157d5;
+  --bg: #f5f7fb;
+  --line: #e4e7ec;
+  --ok: #067647;
+  --bad: #b42318;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    15px/1.5 system-ui,
+    sans-serif;
+}
+/* Navegación principal */
+header {
+  height: 70px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  padding: 0 max(24px, calc((100% - 1180px) / 2));
+  gap: 40px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.brand {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--brand);
+  text-decoration: none;
+}
+.brand span {
+  font-size: 14px;
+  color: var(--ink);
+  margin-left: 5px;
+}
+nav {
+  display: flex;
+  gap: 25px;
+  margin-left: auto;
+}
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+}
+.menu {
+  display: none;
+  margin-left: auto;
+}
+/* Contenido, paneles e indicadores */
+main {
+  max-width: 1180px;
+  margin: auto;
+  padding: 40px 24px 80px;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: 28px;
+}
+.heading h1 {
+  font-size: 34px;
+  margin: 0;
+}
+.heading p,
+.hint {
+  margin: 4px 0;
+  color: var(--muted);
+}
+.eyebrow {
+  font-size: 12px !important;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--brand) !important;
+}
+.button,
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 15px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: #eef1f6;
+  color: var(--ink);
+  text-decoration: none;
+}
+.button {
+  background: var(--brand);
+  color: white;
+}
+.secondary {
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.full {
+  width: 100%;
+  margin-top: 12px;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.stats article,
+.panel,
+.event-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px;
+}
+.stats span {
+  color: var(--muted);
+  font-weight: 600;
+}
+.stats strong {
+  display: block;
+  font-size: 30px;
+  margin-top: 8px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+.panel h2 {
+  margin-top: 0;
+}
+.table-wrap {
+  overflow: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  text-align: left;
+  padding: 13px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+td small,
+.event small {
+  display: block;
+  color: var(--muted);
+}
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 30px;
+}
+.event {
+  display: flex;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.badge {
+  font-size: 12px;
+  border-radius: 99px;
+  padding: 4px 9px;
+  text-transform: capitalize;
+  font-weight: 800;
+}
+.abierto {
+  background: #ecfdf3;
+  color: var(--ok);
+}
+.cerrado {
+  background: #fef3f2;
+  color: var(--bad);
+}
+.filters,
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.filters {
+  margin-bottom: 20px;
+}
+.filters input,
+.filters select {
+  min-width: 160px;
+}
+.filters button {
+  margin-left: auto;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  font: inherit;
+}
+label {
+  display: block;
+  font-weight: 700;
+  color: #344054;
+}
+label input,
+label select,
+label textarea {
+  margin-top: 6px;
+}
+.actions a {
+  padding: 8px 12px;
+  background: #eef1f6;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 700;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.event-card p {
+  color: var(--muted);
+  min-height: 45px;
+}
+.event-card dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.event-card dt {
+  color: var(--muted);
+}
+.event-card dd {
+  text-align: right;
+  margin: 0;
+  font-weight: 700;
+}
+/* Formularios modales y estados de interacción */
+dialog {
+  border: 0;
+  border-radius: 14px;
+  padding: 0;
+  width: min(660px, calc(100% - 30px));
+  box-shadow: 0 20px 60px #10182830;
+}
+dialog::backdrop {
+  background: #10182888;
+}
+dialog form {
+  padding: 24px;
+}
+.modal-head,
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-head h2 {
+  margin: 0;
+}
+.modal-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+.wide {
+  grid-column: 1/-1;
+}
+.scanner-grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 20px;
+}
+#reader {
+  min-height: 320px;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.result {
+  margin-top: 24px;
+  border-radius: 10px;
+  padding: 18px;
+  background: #f2f4f7;
+  color: var(--muted);
+}
+.result.success {
+  background: #ecfdf3;
+  color: var(--ok);
+}
+.result.error {
+  background: #fef3f2;
+  color: var(--bad);
+}
+#toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  padding: 14px 20px;
+  border-radius: 9px;
+  background: #172033;
+  color: #fff;
+  opacity: 0;
+  transition: 0.2s;
+}
+#toast.show {
+  opacity: 1;
+}
+/* Adaptación para tabletas y teléfonos */
+@media (max-width: 800px) {
+  .menu {
+    display: block;
+  }
+  nav {
+    display: none;
+    position: absolute;
+    top: 70px;
+    left: 0;
+    right: 0;
+    background: #fff;
+    padding: 20px;
+    flex-direction: column;
+  }
+  nav.open {
+    display: flex;
+  }
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .grid,
+  .scanner-grid {
+    grid-template-columns: 1fr;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .wide {
+    grid-column: auto;
+  }
+}
+@media (max-width: 480px) {
+  main {
+    padding: 25px 15px;
+  }
+  .heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  .brand span {
+    display: none;
+  }
+}

@@ -1,0 +1,80 @@
+{% extends 'base.html' %}{% block title %}Dashboard · RMS{% endblock %}{% block
+content %}
+<!-- Encabezado y acciones principales de la página -->
+<div class="heading">
+  <div>
+    <p class="eyebrow">RESUMEN GENERAL</p>
+    <h1>Dashboard</h1>
+    <p>Control claro y rápido de la asistencia.</p>
+  </div>
+  <a class="button" href="/escaner">Escanear QR</a>
+</div>
+<!-- Contenido principal de la vista -->
+<section class="stats">
+  <article>
+    <span>Personas</span>
+    <strong>{{stats.personas}}</strong>
+  </article>
+  <article>
+    <span>Activas</span>
+    <strong>{{stats.activas}}</strong>
+  </article>
+  <article>
+    <span>Inactivas</span>
+    <strong>{{stats.inactivas}}</strong>
+  </article>
+  <article>
+    <span>Eventos</span>
+    <strong>{{stats.eventos}}</strong>
+  </article>
+  <article>
+    <span>Asistencias hoy</span>
+    <strong>{{stats.hoy}}</strong>
+  </article>
+</section>
+<section class="grid">
+  <article class="panel">
+    <h2>Asistencias recientes</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Persona</th>
+            <th>Evento</th>
+            <th>Hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in recientes %}
+          <tr>
+            <td>{{a.persona.nombres}} {{a.persona.apellidos}}</td>
+            <td>{{a.evento.nombre}}</td>
+            <td>{{a.fecha_hora.strftime('%d/%m/%Y %H:%M')}}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3" class="empty">Aún no hay registros.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>Eventos</h2>
+    {% for e in eventos %}
+    <div class="event">
+      <div>
+        <b>{{e.nombre}}</b>
+        <small>
+          {{e.fecha.strftime('%d/%m/%Y')}} · {{e.sede or 'Sin sede'}}
+        </small>
+      </div>
+      <span class="badge {{e.estado}}">{{e.estado}}</span>
+    </div>
+    {% else %}
+    <p class="empty">Crea tu primer evento.</p>
+    {% endfor %}
+  </article>
+</section>
+{% endblock %}
