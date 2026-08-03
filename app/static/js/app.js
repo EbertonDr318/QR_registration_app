@@ -11,7 +11,12 @@ $(".menu")?.addEventListener("click", () =>
 );
 // Cliente HTTP común para consumir respuestas JSON de la API Flask.
 async function api(url, o = {}) {
-  o.headers = { ...o.headers, "Content-Type": "application/json" };
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+  o.headers = {
+    ...o.headers,
+    "Content-Type": "application/json",
+    ...(csrfToken ? { "X-CSRFToken": csrfToken } : {}),
+  };
   let r = await fetch(url, o),
     d = await r.json();
   if (!r.ok) throw Error(d.message || "Error de conexión");

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Mi cuenta · RMS{% endblock %}
+
+{% block content %}
+  <div class="heading">
+    <div>
+      <p class="eyebrow">MI CUENTA</p>
+      <h1>Hola, {{ persona.nombres }}</h1>
+      <p>Consulta tu identificación y tu participación en eventos.</p>
+    </div>
+    <a class="button" href="{{ url_for('account.my_qr_page') }}">Ver mi QR</a>
+  </div>
+  <section class="stats stats-three">
+    <article><span>Código</span><strong>{{ persona.codigo }}</strong></article>
+    <article><span>Asistencias</span><strong>{{ asistencias|length }}</strong></article>
+    <article><span>Próximos eventos</span><strong>{{ proximos|length }}</strong></article>
+  </section>
+  <section class="grid">
+    <article class="panel">
+      <h2>Actividad reciente</h2>
+      {% for item in asistencias[:5] %}
+        <div class="event">
+          <div><b>{{ item.evento.nombre }}</b><small>{{ item.fecha_hora.strftime('%d/%m/%Y %H:%M') }}</small></div>
+        </div>
+      {% else %}<p class="empty">Todavía no tienes asistencias.</p>{% endfor %}
+    </article>
+    <article class="panel">
+      <h2>Próximos eventos</h2>
+      {% for evento in proximos[:5] %}
+        <div class="event">
+          <div>
+            <b>{{ evento.nombre }}</b>
+            <small>
+              {{ evento.fecha.strftime('%d/%m/%Y') }} ·
+              {{ evento.sede or 'General' }}
+            </small>
+          </div>
+        </div>
+      {% else %}<p class="empty">No hay eventos disponibles.</p>{% endfor %}
+    </article>
+  </section>
+{% endblock %}

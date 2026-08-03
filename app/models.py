@@ -1,5 +1,7 @@
 from datetime import datetime
+from flask_login import UserMixin
 from . import db
+
 
 class Persona(db.Model):
     __tablename__ = "personas"
@@ -14,11 +16,30 @@ class Persona(db.Model):
     qr_token = db.Column(db.String(64), unique=True, nullable=False, index=True)
     activo = db.Column(db.Boolean, nullable=False, default=True, index=True)
     fecha_registro = db.Column(db.DateTime, nullable=False, default=datetime.now)
-    fecha_actualizacion = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
-    asistencias = db.relationship("Asistencia", back_populates="persona", cascade="all, delete-orphan")
+    fecha_actualizacion = db.Column(
+        db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now
+    )
+    asistencias = db.relationship(
+        "Asistencia", back_populates="persona", cascade="all, delete-orphan"
+    )
+    usuario = db.relationship("Usuario", back_populates="persona", uselist=False)
 
     def to_dict(self):
-        return {k: getattr(self, k) for k in ("id", "codigo", "nombres", "apellidos", "correo", "telefono", "sede", "grupo", "activo")}
+        return {
+            k: getattr(self, k)
+            for k in (
+                "id",
+                "codigo",
+                "nombres",
+                "apellidos",
+                "correo",
+                "telefono",
+                "sede",
+                "grupo",
+                "activo",
+            )
+        }
+
 
 class Evento(db.Model):
     __tablename__ = "eventos"
@@ -30,22 +51,111 @@ class Evento(db.Model):
     sede = db.Column(db.String(80), index=True)
     estado = db.Column(db.String(10), nullable=False, default="abierto", index=True)
     fecha_creacion = db.Column(db.DateTime, nullable=False, default=datetime.now)
-    fecha_actualizacion = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
-    asistencias = db.relationship("Asistencia", back_populates="evento", cascade="all, delete-orphan")
+    fecha_actualizacion = db.Column(
+        db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now
+    )
+    asistencias = db.relationship(
+        "Asistencia", back_populates="evento", cascade="all, delete-orphan"
+    )
 
     def to_dict(self):
-        return {"id": self.id, "nombre": self.nombre, "descripcion": self.descripcion, "fecha": self.fecha.isoformat(), "hora_inicio": self.hora_inicio.strftime("%H:%M"), "sede": self.sede, "estado": self.estado}
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "descripcion": self.descripcion,
+            "fecha": self.fecha.isoformat(),
+            "hora_inicio": self.hora_inicio.strftime("%H:%M"),
+            "sede": self.sede,
+            "estado": self.estado,
+        }
+
 
 class Asistencia(db.Model):
     __tablename__ = "asistencias"
-    __table_args__ = (db.UniqueConstraint("persona_id", "evento_id", name="uq_asistencia_persona_evento"),)
+    __table_args__ = (
+        db.UniqueConstraint(
+            "persona_id", "evento_id", name="uq_asistencia_persona_evento"
+        ),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    persona_id = db.Column(db.Integer, db.ForeignKey("personas.id", ondelete="CASCADE"), nullable=False, index=True)
-    evento_id = db.Column(db.Integer, db.ForeignKey("eventos.id", ondelete="CASCADE"), nullable=False, index=True)
-    fecha_hora = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    persona_id = db.Column(
+        db.Integer,
+        db.ForeignKey("personas.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evento_id = db.Column(
+        db.Integer,
+        db.ForeignKey("eventos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    fecha_hora = db.Column(
+        db.DateTime, nullable=False, default=datetime.now, index=True
+    )
     metodo_registro = db.Column(db.String(20), nullable=False, default="qr")
     persona = db.relationship("Persona", back_populates="asistencias")
     evento = db.relationship("Evento", back_populates="asistencias")
 
     def to_dict(self):
-        return {"id": self.id, "persona_id": self.persona_id, "persona": f"{self.persona.nombres} {self.persona.apellidos}", "codigo": self.persona.codigo, "evento_id": self.evento_id, "evento": self.evento.nombre, "sede": self.persona.sede, "grupo": self.persona.grupo, "fecha_hora": self.fecha_hora.isoformat(), "metodo_registro": self.metodo_registro}
+        return {
+            "id": self.id,
+            "persona_id": self.persona_id,
+            "persona": f"{self.persona.nombres} {self.persona.apellidos}",
+            "codigo": self.persona.codigo,
+            "evento_id": self.evento_id,
+            "evento": self.evento.nombre,
+            "sede": self.persona.sede,
+            "grupo": self.persona.grupo,
+            "fecha_hora": self.fecha_hora.isoformat(),
+            "metodo_registro": self.metodo_registro,
+        }
+
+
+class Usuario(UserMixin, db.Model):
+    __tablename__ = "usuarios"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "proveedor", "proveedor_subject", name="uq_usuario_proveedor_subject"
+        ),
+        db.CheckConstraint("rol IN ('usuario', 'admin')", name="ck_usuario_rol"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    nombre = db.Column(db.String(160), nullable=False)
+    foto_url = db.Column(db.String(500))
+    proveedor = db.Column(db.String(30), nullable=False, default="google")
+    proveedor_subject = db.Column(db.String(255))
+    rol = db.Column(db.String(20), nullable=False, default="usuario", index=True)
+    persona_id = db.Column(
+        db.Integer,
+        db.ForeignKey("personas.id", ondelete="SET NULL"),
+        unique=True,
+        index=True,
+    )
+    activo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    ultimo_acceso = db.Column(db.DateTime)
+    fecha_creacion = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    fecha_actualizacion = db.Column(
+        db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now
+    )
+    persona = db.relationship("Persona", back_populates="usuario")
+
+    @staticmethod
+    def normalize_email(email):
+        return str(email or "").strip().casefold()
+
+    @property
+    def is_active(self):
+        if not self.activo:
+            return False
+        return self.rol == "admin" or bool(self.persona and self.persona.activo)
+
+    @property
+    def is_admin(self):
+        return self.rol == "admin"
+
+    @property
+    def is_regular_user(self):
+        return self.rol == "usuario"

@@ -55,7 +55,7 @@ content %}
           </td>
           <td class="actions">
             <button onclick="editPerson({{p.to_dict()|tojson}})">Editar</button>
-            <a href="/api/personas/{{p.id}}/qr" target="_blank">QR</a>
+            <a href="{{ url_for('api.persona_qr', pid=p.id) }}" target="_blank">QR</a>
             <button
               onclick="togglePerson({{p.id}},{{'false' if p.activo else 'true'}})"
             >
