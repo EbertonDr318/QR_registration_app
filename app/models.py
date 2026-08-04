@@ -63,6 +63,7 @@ class Persona(db.Model):
     apellidos = db.Column(db.String(80), nullable=False)
     correo = db.Column(db.String(120), index=True)
     telefono = db.Column(db.String(25))
+    fecha_nacimiento = db.Column(db.Date)
     sede = db.Column(db.String(80), index=True)
     grupo = db.Column(db.String(80), index=True)
     qr_token = db.Column(db.String(64), unique=True, nullable=False, index=True)
@@ -96,6 +97,9 @@ class Persona(db.Model):
             "apellidos": self.apellidos,
             "correo": self.correo,
             "telefono": self.telefono,
+            "fecha_nacimiento": (
+                self.fecha_nacimiento.isoformat() if self.fecha_nacimiento else None
+            ),
             "sede": self.sede,
             "grupo": self.grupo,
             "activo": self.activo,

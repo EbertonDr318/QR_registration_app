@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from datetime import date
 
 GROUPS = ("Damas", "Caballeros", "Jóvenes", "Adolescentes", "Niños")
 PHONE = re.compile(r"^\d{1,25}$")
@@ -35,3 +36,14 @@ def normalize_group(value: str) -> str | None:
         ),
         None,
     )
+
+
+def parse_birth_date(value: str) -> date | None:
+    """Convierte una fecha ISO opcional y rechaza cumpleaños futuros."""
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    parsed = date.fromisoformat(raw)
+    if parsed > date.today():
+        raise ValueError("La fecha de nacimiento no puede estar en el futuro")
+    return parsed

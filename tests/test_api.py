@@ -268,6 +268,7 @@ def test_regular_user_updates_only_own_safe_profile_fields(client, app, churches
             "nombres": "Nombre Editado",
             "apellidos": "Usuario",
             "telefono": "55550101",
+            "fecha_nacimiento": "2000-05-20",
             "sede": "Centro",
             "grupo": "Jovenes",
             "codigo": "ALTERADO",
@@ -279,6 +280,7 @@ def test_regular_user_updates_only_own_safe_profile_fields(client, app, churches
         own = db.session.get(Persona, own_id)
         assert own.nombres == "Nombre Editado"
         assert own.grupo == "Jóvenes"
+        assert own.fecha_nacimiento == date(2000, 5, 20)
         assert own.codigo == "UX-USER-010"
         assert own.correo == "own@example.test"
         assert db.session.get(Persona, other_id).nombres == "Otra"
@@ -304,10 +306,16 @@ def test_admin_created_people_receive_next_tenant_code(client, app, churches):
     assert invalid.get_json()["errors"]["telefono"] == "Solo se permiten números"
     response = client.post(
         "/api/personas",
-        json={"nombres": "Menor", "apellidos": "Sin celular", "grupo": "Adolescentes"},
+        json={
+            "nombres": "Menor",
+            "apellidos": "Sin celular",
+            "grupo": "Adolescentes",
+            "fecha_nacimiento": "2012-08-04",
+        },
     )
     assert response.status_code == 201
     assert response.get_json()["data"]["codigo"] == "UX-USER-005"
+    assert response.get_json()["data"]["fecha_nacimiento"] == "2012-08-04"
     person_id = response.get_json()["data"]["id"]
     page = client.get("/admin/personas")
     assert b"Registro manual" in page.data

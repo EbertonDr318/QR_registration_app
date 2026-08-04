@@ -9,7 +9,7 @@ from .models import Persona, Evento, Asistencia
 from .permissions import admin_required, get_current_iglesia
 from .services.access_requests import next_person_code
 from .services.qr_documents import build_qr_card_pdf
-from .profile_fields import normalize_group, valid_phone
+from .profile_fields import normalize_group, parse_birth_date, valid_phone
 
 api = Blueprint("api", __name__)
 EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -34,6 +34,7 @@ def persona_data(payload, partial=False):
         "apellidos": 80,
         "correo": 120,
         "telefono": 25,
+        "fecha_nacimiento": 10,
         "sede": 80,
         "grupo": 80,
     }
@@ -58,6 +59,11 @@ def persona_data(payload, partial=False):
             errors["grupo"] = "Selecciona un grupo válido"
         else:
             data["grupo"] = group
+    if "fecha_nacimiento" in data:
+        try:
+            data["fecha_nacimiento"] = parse_birth_date(data["fecha_nacimiento"])
+        except ValueError:
+            errors["fecha_nacimiento"] = "Fecha de nacimiento inválida"
     if "activo" in payload:
         data["activo"] = bool(payload["activo"])
     return data, errors

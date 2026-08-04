@@ -41,6 +41,7 @@ function editPerson(p) {
     "apellidos",
     "correo",
     "telefono",
+    "fecha_nacimiento",
     "sede",
     "grupo",
   ].forEach((k) => (document.getElementById(k).value = p[k] || ""));
@@ -55,6 +56,7 @@ $("#personForm")?.addEventListener("submit", async (e) => {
     "apellidos",
     "correo",
     "telefono",
+    "fecha_nacimiento",
     "sede",
     "grupo",
   ].forEach((k) => (d[k] = document.getElementById(k).value));
