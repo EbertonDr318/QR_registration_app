@@ -7,7 +7,10 @@
     <p class="eyebrow">IDENTIFICACIÓN PERSONAL</p>
     <h1>Mi código QR</h1>
     <img src="{{ url_for('account.my_qr_api') }}" alt="Código QR de {{ persona.nombres }}" />
-    <p><b>{{ persona.nombres }} {{ persona.apellidos }}</b><br />{{ persona.codigo }}</p>
+    <p>
+      <b>{{ persona.nombres }} {{ persona.apellidos }}</b><br />
+      Grupo: {{ persona.grupo or 'Sin asignar' }}
+    </p>
     <p>{{ iglesia.nombre }}</p>
     <a class="button" href="{{ url_for('account.my_qr_pdf') }}">Descargar carnet PDF</a>
     <p class="hint">No compartas esta identificación con otras personas.</p>

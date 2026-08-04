@@ -108,7 +108,7 @@ content %}
       </label>
       <label>
         Teléfono
-        <input id="telefono" maxlength="25" />
+        <input id="telefono" maxlength="25" inputmode="numeric" pattern="[0-9]*" />
       </label>
       <label>
         Sede
@@ -116,7 +116,14 @@ content %}
       </label>
       <label>
         Grupo
-        <input id="grupo" maxlength="80" />
+        <select id="grupo">
+          <option value="">Seleccionar grupo…</option>
+          <option value="Damas">Damas</option>
+          <option value="Caballeros">Caballeros</option>
+          <option value="Jóvenes">Jóvenes</option>
+          <option value="Adolescentes">Adolescentes</option>
+          <option value="Niños">Niños</option>
+        </select>
       </label>
     </div>
     <div class="modal-actions">

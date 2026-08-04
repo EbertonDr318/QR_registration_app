@@ -7,6 +7,7 @@ from .models import Asistencia, Evento
 from . import db
 from .audit import record_audit
 from .services.qr_documents import build_qr_card_pdf
+from .profile_fields import GROUPS, normalize_group, valid_phone
 from .permissions import (
     get_current_iglesia,
     get_current_membership,
@@ -52,6 +53,7 @@ def _account_context():
         "asistencias": attendances,
         "ultima_asistencia": attendances[0] if attendances else None,
         "proximos": _upcoming_events(person, iglesia.id),
+        "groups": GROUPS,
     }
 
 
@@ -86,6 +88,14 @@ def update_my_information():
     if not values["nombres"] or not values["apellidos"]:
         flash("Nombre y apellidos son obligatorios.", "error")
         return redirect(url_for("account.my_information"))
+    if not valid_phone(values["telefono"]):
+        flash("El teléfono solo puede contener números.", "error")
+        return redirect(url_for("account.my_information"))
+    group = normalize_group(values["grupo"])
+    if values["grupo"] and not group:
+        flash("Selecciona un grupo válido.", "error")
+        return redirect(url_for("account.my_information"))
+    values["grupo"] = group or ""
     for key, value in values.items():
         setattr(person, key, value or None)
     record_audit(person.iglesia_id, "actualizar_perfil_propio", "persona", person.id)

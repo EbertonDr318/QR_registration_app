@@ -14,9 +14,16 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <label>Nombres<input name="nombres" value="{{ persona.nombres }}" maxlength="80" required /></label>
       <label>Apellidos<input name="apellidos" value="{{ persona.apellidos }}" maxlength="80" required /></label>
-      <label>Teléfono<input name="telefono" value="{{ persona.telefono or '' }}" maxlength="25" /></label>
+      <label>Teléfono<input name="telefono" value="{{ persona.telefono or '' }}" maxlength="25" inputmode="numeric" pattern="[0-9]*" /></label>
       <label>Sede<input name="sede" value="{{ persona.sede or '' }}" maxlength="80" /></label>
-      <label>Grupo<input name="grupo" value="{{ persona.grupo or '' }}" maxlength="80" /></label>
+      <label>Grupo
+        <select name="grupo">
+          <option value="">Seleccionar grupo…</option>
+          {% for group in groups %}
+            <option value="{{ group }}" {% if persona.grupo and persona.grupo|lower == group|lower %}selected{% endif %}>{{ group }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <div class="readonly-setting">
         <span><b>Código:</b> {{ persona.codigo }}</span>
         <span><b>Correo Google:</b> {{ persona.correo or '—' }}</span>

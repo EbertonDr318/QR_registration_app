@@ -9,6 +9,7 @@ from .models import Persona, Evento, Asistencia
 from .permissions import admin_required, get_current_iglesia
 from .services.access_requests import next_person_code
 from .services.qr_documents import build_qr_card_pdf
+from .profile_fields import normalize_group, valid_phone
 
 api = Blueprint("api", __name__)
 EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -49,6 +50,14 @@ def persona_data(payload, partial=False):
             errors[key] = "No puede estar vacío"
     if data.get("correo") and not EMAIL.match(data["correo"]):
         errors["correo"] = "Correo inválido"
+    if not valid_phone(data.get("telefono", "")):
+        errors["telefono"] = "Solo se permiten números"
+    if data.get("grupo"):
+        group = normalize_group(data["grupo"])
+        if not group:
+            errors["grupo"] = "Selecciona un grupo válido"
+        else:
+            data["grupo"] = group
     if "activo" in payload:
         data["activo"] = bool(payload["activo"])
     return data, errors

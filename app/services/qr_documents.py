@@ -37,7 +37,9 @@ def build_qr_card_pdf(person, church) -> io.BytesIO:
         page_width / 2, y + 95, f"{person.nombres} {person.apellidos}"[:34]
     )
     pdf.setFont("Helvetica", 13)
-    pdf.drawCentredString(page_width / 2, y + 70, person.codigo)
+    pdf.drawCentredString(
+        page_width / 2, y + 70, f"Grupo: {person.grupo or 'Sin asignar'}"
+    )
     pdf.setFont("Helvetica", 9)
     pdf.setFillColor(HexColor("#667085"))
     pdf.drawCentredString(page_width / 2, y + 35, "Identificación personal · No transferible")
