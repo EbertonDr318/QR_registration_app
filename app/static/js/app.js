@@ -26,15 +26,17 @@ async function api(url, o = {}) {
 function openPerson() {
   personForm.reset();
   pid.value = "";
+  codigo.value = "";
   personTitle.textContent = "Registrar persona";
   personDialog.showModal();
 }
 function editPerson(p) {
   openPerson();
   pid.value = p.id;
+  codigo.value = p.codigo;
+  codigo.readOnly = true;
   personTitle.textContent = "Editar persona";
   [
-    "codigo",
     "nombres",
     "apellidos",
     "correo",

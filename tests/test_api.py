@@ -231,7 +231,73 @@ def test_regular_user_only_sees_membership_person_and_own_qr(client, app, church
     own_data = client.get("/api/mi-cuenta").get_json()["data"]
     assert own_data["id"] == own_id and "qr_token" not in own_data
     assert client.get("/api/mi-cuenta/qr").mimetype == "image/png"
+    own_pdf = client.get("/api/mi-cuenta/qr.pdf")
+    assert own_pdf.status_code == 200
+    assert own_pdf.mimetype == "application/pdf"
+    assert own_pdf.data.startswith(b"%PDF")
     assert client.get(f"/api/personas/{other_id}").status_code == 403
+
+
+def test_regular_user_updates_only_own_safe_profile_fields(client, app, churches):
+    with app.app_context():
+        church = db.session.get(Iglesia, churches[0])
+        own = create_person(church, codigo="UX-USER-010", correo="own@example.test")
+        other = create_person(church, codigo="UX-USER-011", nombres="Otra")
+        user = create_user(email="own@example.test")
+        create_membership(user, church, own)
+        own_id, other_id = own.id, other.id
+        login(client, user, church)
+    response = client.post(
+        "/mi-cuenta/informacion",
+        data={
+            "nombres": "Nombre Editado",
+            "apellidos": "Usuario",
+            "telefono": "5555-0101",
+            "sede": "Centro",
+            "grupo": "Jovenes",
+            "codigo": "ALTERADO",
+            "correo": "otro@example.test",
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        own = db.session.get(Persona, own_id)
+        assert own.nombres == "Nombre Editado"
+        assert own.codigo == "UX-USER-010"
+        assert own.correo == "own@example.test"
+        assert db.session.get(Persona, other_id).nombres == "Otra"
+
+
+def test_admin_created_people_receive_next_tenant_code(client, app, churches):
+    with app.app_context():
+        church = db.session.get(Iglesia, churches[0])
+        create_person(church, codigo="UX-USER-004")
+        admin_user = create_user()
+        create_membership(admin_user, church, rol="admin")
+        login(client, admin_user, church)
+    response = client.post(
+        "/api/personas",
+        json={"nombres": "Menor", "apellidos": "Sin celular", "grupo": "Pre adolescentes"},
+    )
+    assert response.status_code == 201
+    assert response.get_json()["data"]["codigo"] == "UX-USER-005"
+    person_id = response.get_json()["data"]["id"]
+    page = client.get("/admin/personas")
+    assert b"Registro manual" in page.data
+    pdf = client.get(f"/api/personas/{person_id}/qr.pdf")
+    assert pdf.status_code == 200 and pdf.data.startswith(b"%PDF")
+
+
+def test_admin_cannot_download_foreign_tenant_qr_pdf(client, app, churches):
+    with app.app_context():
+        own_church = db.session.get(Iglesia, churches[0])
+        foreign_church = db.session.get(Iglesia, churches[1])
+        foreign_person = create_person(foreign_church)
+        admin_user = create_user()
+        create_membership(admin_user, own_church, rol="admin")
+        foreign_id = foreign_person.id
+        login(client, admin_user, own_church)
+    assert client.get(f"/api/personas/{foreign_id}/qr.pdf").status_code == 404
 
 
 def test_upcoming_events_follow_church_date_state_and_site(client, app, churches):
@@ -386,7 +452,7 @@ def test_membership_page_explains_link_and_preserves_current_values(
     assert b"Autorizar ingreso" in page.data
     assert b"Rechazar solicitud" in page.data
     assert b"Ficha asignada: UX-USER-001" in page.data
-    assert b"Cambiar rol" not in page.data
+    assert b"Guardar rol" in page.data
     assert b"Vincular ficha" not in page.data
 
 

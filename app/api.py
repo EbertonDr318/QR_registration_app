@@ -7,6 +7,8 @@ from . import db
 from .audit import record_audit
 from .models import Persona, Evento, Asistencia
 from .permissions import admin_required, get_current_iglesia
+from .services.access_requests import next_person_code
+from .services.qr_documents import build_qr_card_pdf
 
 api = Blueprint("api", __name__)
 EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -88,12 +90,18 @@ def persona_get(pid):
 @api.post("/personas")
 @admin_required
 def persona_create():
-    data, errors = persona_data(request.get_json(silent=True) or {})
+    payload = request.get_json(silent=True) or {}
+    payload["codigo"] = "AUTOMATICO"
+    data, errors = persona_data(payload)
     if errors:
         return fail("Datos inválidos", errors=errors)
+    church = get_current_iglesia()
+    # El bloqueo evita asignar el mismo correlativo a dos altas simultáneas.
+    db.session.get(type(church), church.id, with_for_update=True)
+    data["codigo"] = next_person_code(church.id)
     p = Persona(
         **data,
-        iglesia_id=get_current_iglesia().id,
+        iglesia_id=church.id,
         qr_token=secrets.token_urlsafe(32),
     )
     db.session.add(p)
@@ -170,6 +178,20 @@ def persona_qr(pid):
         mimetype="image/png",
         download_name=f"qr-{p.codigo}.png",
         as_attachment=request.args.get("descargar") == "1",
+    )
+
+
+@api.get("/personas/<int:pid>/qr.pdf")
+@admin_required
+def persona_qr_pdf(pid):
+    """Descarga un carnet PDF solo para una persona del tenant activo."""
+    church = get_current_iglesia()
+    person = Persona.query.filter_by(id=pid, iglesia_id=church.id).first_or_404()
+    return send_file(
+        build_qr_card_pdf(person, church),
+        mimetype="application/pdf",
+        download_name=f"carnet-{person.codigo}.pdf",
+        as_attachment=True,
     )
 
 

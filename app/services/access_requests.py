@@ -11,7 +11,7 @@ CODE_PREFIX = "UX-USER-"
 CODE_PATTERN = re.compile(r"^UX-USER-(\d+)$")
 
 
-def _next_person_code(church_id: int) -> str:
+def next_person_code(church_id: int) -> str:
     """Obtiene el siguiente código correlativo dentro de una sola iglesia."""
     codes = (
         db.session.query(Persona.codigo)
@@ -48,7 +48,7 @@ def create_access_request(user: Usuario, church: Iglesia) -> MembresiaIglesia:
     nombres, apellidos = _person_names(user)
     person = Persona(
         iglesia=locked_church,
-        codigo=_next_person_code(church.id),
+        codigo=next_person_code(church.id),
         nombres=nombres,
         apellidos=apellidos,
         correo=Usuario.normalize_email(user.email),

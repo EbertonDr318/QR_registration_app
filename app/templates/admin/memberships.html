@@ -65,6 +65,14 @@
                     </form>
                   {% endif %}
                 </div>
+                <form method="post" action="{{ url_for('admin.membership_role', membership_id=membership.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <select name="rol" aria-label="Rol de la cuenta">
+                    <option value="usuario" {% if membership.rol == 'usuario' %}selected{% endif %}>Usuario</option>
+                    <option value="admin" {% if membership.rol == 'admin' %}selected{% endif %}>Administrador</option>
+                  </select>
+                  <button type="submit">Guardar rol</button>
+                </form>
                 {% if membership.persona %}
                   <small class="action-hint">Ficha asignada: {{ membership.persona.codigo }}</small>
                 {% endif %}
