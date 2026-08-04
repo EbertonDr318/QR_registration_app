@@ -28,6 +28,7 @@ content %}
         <tr>
           <th>Código</th>
           <th>Persona</th>
+          <th>Origen</th>
           <th>Sede / grupo</th>
           <th>Estado</th>
           <th>Acciones</th>
@@ -45,6 +46,13 @@ content %}
             <small>{{p.correo or ''}}</small>
           </td>
           <td>
+            {% if p.membresia %}
+              <span class="badge abierto">Cuenta Google</span>
+            {% else %}
+              <span class="badge pendiente">Registro manual</span>
+            {% endif %}
+          </td>
+          <td>
             {{p.sede or '—'}}
             <small>{{p.grupo or ''}}</small>
           </td>
@@ -56,6 +64,7 @@ content %}
           <td class="actions">
             <button onclick="editPerson({{p.to_dict()|tojson}})">Editar</button>
             <a href="{{ url_for('api.persona_qr', pid=p.id) }}" target="_blank">QR</a>
+            <a href="{{ url_for('api.persona_qr_pdf', pid=p.id) }}">Carnet PDF</a>
             <button
               onclick="togglePerson({{p.id}},{{'false' if p.activo else 'true'}})"
             >
@@ -65,7 +74,7 @@ content %}
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="empty">No hay personas registradas.</td>
+          <td colspan="6" class="empty">No hay personas registradas.</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -82,8 +91,8 @@ content %}
     <input type="hidden" id="pid" />
     <div class="form-grid">
       <label>
-        Código interno*
-        <input id="codigo" maxlength="30" required />
+        Código interno
+        <input id="codigo" maxlength="30" placeholder="Se asignará automáticamente" readonly />
       </label>
       <label>
         Nombres*

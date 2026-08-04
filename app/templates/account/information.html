@@ -9,15 +9,20 @@
       <h1>Mi información</h1>
     </div>
   </div>
-  <section class="panel profile-details">
-    <dl>
-      <dt>Código</dt><dd>{{ persona.codigo }}</dd>
-      <dt>Iglesia</dt><dd>{{ iglesia.nombre }}</dd>
-      <dt>Nombre</dt><dd>{{ persona.nombres }} {{ persona.apellidos }}</dd>
-      <dt>Correo</dt><dd>{{ persona.correo or '—' }}</dd>
-      <dt>Teléfono</dt><dd>{{ persona.telefono or '—' }}</dd>
-      <dt>Sede</dt><dd>{{ persona.sede or '—' }}</dd>
-      <dt>Grupo</dt><dd>{{ persona.grupo or '—' }}</dd>
-    </dl>
+  <section class="panel">
+    <form method="post" action="{{ url_for('account.update_my_information') }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label>Nombres<input name="nombres" value="{{ persona.nombres }}" maxlength="80" required /></label>
+      <label>Apellidos<input name="apellidos" value="{{ persona.apellidos }}" maxlength="80" required /></label>
+      <label>Teléfono<input name="telefono" value="{{ persona.telefono or '' }}" maxlength="25" /></label>
+      <label>Sede<input name="sede" value="{{ persona.sede or '' }}" maxlength="80" /></label>
+      <label>Grupo<input name="grupo" value="{{ persona.grupo or '' }}" maxlength="80" /></label>
+      <div class="readonly-setting">
+        <span><b>Código:</b> {{ persona.codigo }}</span>
+        <span><b>Correo Google:</b> {{ persona.correo or '—' }}</span>
+        <span><b>Iglesia:</b> {{ iglesia.nombre }}</span>
+      </div>
+      <div class="full"><button class="button" type="submit">Guardar mi información</button></div>
+    </form>
   </section>
 {% endblock %}

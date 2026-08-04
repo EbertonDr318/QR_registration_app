@@ -1,9 +1,12 @@
 from datetime import date
 
-from flask import Blueprint, jsonify, render_template, send_file
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, send_file, url_for
 from sqlalchemy import or_
 
 from .models import Asistencia, Evento
+from . import db
+from .audit import record_audit
+from .services.qr_documents import build_qr_card_pdf
 from .permissions import (
     get_current_iglesia,
     get_current_membership,
@@ -72,6 +75,25 @@ def my_information():
     return render_template("account/information.html", **_account_context())
 
 
+@account.post("/mi-cuenta/informacion")
+@linked_persona_required
+def update_my_information():
+    """Permite editar solo los datos personales no privilegiados de la ficha propia."""
+    membership = get_current_membership()
+    person = membership.persona
+    fields = {"nombres": 80, "apellidos": 80, "telefono": 25, "sede": 80, "grupo": 80}
+    values = {key: str(request.form.get(key) or "").strip()[:limit] for key, limit in fields.items()}
+    if not values["nombres"] or not values["apellidos"]:
+        flash("Nombre y apellidos son obligatorios.", "error")
+        return redirect(url_for("account.my_information"))
+    for key, value in values.items():
+        setattr(person, key, value or None)
+    record_audit(person.iglesia_id, "actualizar_perfil_propio", "persona", person.id)
+    db.session.commit()
+    flash("Tu información fue actualizada.", "success")
+    return redirect(url_for("account.my_information"))
+
+
 @account.get("/mi-cuenta/eventos")
 @account.get("/mis-eventos")
 @linked_persona_required
@@ -103,6 +125,20 @@ def my_qr_api():
         output,
         mimetype="image/png",
         download_name=f"qr-{person.codigo}.png",
+        as_attachment=True,
+    )
+
+
+@account.get("/api/mi-cuenta/qr.pdf")
+@linked_persona_required
+def my_qr_pdf():
+    """Permite al usuario descargar únicamente su propio carnet QR."""
+    context = _account_context()
+    person = context["persona"]
+    return send_file(
+        build_qr_card_pdf(person, context["iglesia"]),
+        mimetype="application/pdf",
+        download_name=f"carnet-{person.codigo}.pdf",
         as_attachment=True,
     )
 
