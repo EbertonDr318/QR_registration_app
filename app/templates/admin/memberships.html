@@ -7,9 +7,13 @@
     <div>
       <p class="eyebrow">ACCESOS</p>
       <h1>Membresías</h1>
-      <p>Administra solicitudes y roles de {{ current_iglesia.nombre }}.</p>
+      <p>Administra quién puede ingresar a {{ current_iglesia.nombre }} y qué puede hacer.</p>
     </div>
   </div>
+  <aside class="notice">
+    Cada solicitud ya incluye una ficha personal, un código único y el rol Usuario.
+    Revisa la cuenta y decide si autorizas o rechazas su ingreso.
+  </aside>
   <section class="panel">
     <div class="table-wrap">
       <table>
@@ -28,32 +32,42 @@
               <td>{{ membership.rol }}</td>
               <td><span class="badge {{ membership.estado }}">{{ membership.estado }}</span></td>
               <td class="membership-actions">
-                <form method="post" action="{{ url_for('admin.membership_status', membership_id=membership.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                  <select name="estado">
-                    <option>activo</option>
-                    <option>suspendido</option>
-                    <option>rechazado</option>
-                  </select>
-                  <button type="submit">Cambiar estado</button>
-                </form>
-                <form method="post" action="{{ url_for('admin.membership_role', membership_id=membership.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                  <select name="rol"><option>usuario</option><option>admin</option></select>
-                  <button type="submit">Cambiar rol</button>
-                </form>
-                <form method="post" action="{{ url_for('admin.membership_person', membership_id=membership.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                  <select name="persona_id" required>
-                    <option value="">Vincular persona…</option>
-                    {% for person in people %}
-                      <option value="{{ person.id }}">
-                        {{ person.codigo }} · {{ person.nombres }} {{ person.apellidos }}
-                      </option>
-                    {% endfor %}
-                  </select>
-                  <button type="submit">Vincular</button>
-                </form>
+                <div class="access-actions" aria-label="Decisión sobre la solicitud de ingreso">
+                  {% if membership.estado == 'pendiente' %}
+                    <form method="post" action="{{ url_for('admin.membership_status', membership_id=membership.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      <input type="hidden" name="estado" value="activo" />
+                      <button
+                        type="submit"
+                        class="approve-action"
+                        {% if membership.rol == 'usuario' and not membership.persona %}
+                          disabled
+                          title="Primero vincula una ficha personal"
+                        {% endif %}
+                      >Autorizar ingreso</button>
+                    </form>
+                    <form method="post" action="{{ url_for('admin.membership_status', membership_id=membership.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      <input type="hidden" name="estado" value="rechazado" />
+                      <button type="submit" class="reject-action">Rechazar solicitud</button>
+                    </form>
+                  {% elif membership.estado == 'activo' %}
+                    <form method="post" action="{{ url_for('admin.membership_status', membership_id=membership.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      <input type="hidden" name="estado" value="suspendido" />
+                      <button type="submit">Suspender acceso</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="{{ url_for('admin.membership_status', membership_id=membership.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      <input type="hidden" name="estado" value="activo" />
+                      <button type="submit" class="approve-action">Reactivar acceso</button>
+                    </form>
+                  {% endif %}
+                </div>
+                {% if membership.persona %}
+                  <small class="action-hint">Ficha asignada: {{ membership.persona.codigo }}</small>
+                {% endif %}
               </td>
             </tr>
           {% else %}
