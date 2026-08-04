@@ -49,18 +49,53 @@ def memberships():
         .order_by(MembresiaIglesia.fecha_solicitud.desc())
         .all()
     )
-    people = (
-        Persona.query.filter_by(iglesia_id=church.id, activo=True)
-        .order_by(Persona.apellidos)
-        .all()
-    )
-    return render_template("admin/memberships.html", memberships=rows, people=people)
+    return render_template("admin/memberships.html", memberships=rows)
 
 
 @admin.get("/admin/configuracion")
 @admin_required
 def settings():
     return render_template("admin/settings.html", iglesia=get_current_iglesia())
+
+
+@admin.post("/admin/configuracion")
+@admin_required
+def update_settings():
+    """Actualiza únicamente la iglesia activa del administrador autenticado."""
+    church = get_current_iglesia()
+    nombre = str(request.form.get("nombre") or "").strip()
+    ciudad = str(request.form.get("ciudad") or "").strip()
+    pais = str(request.form.get("pais") or "").strip()
+    zona_horaria = str(request.form.get("zona_horaria") or "").strip()
+    descripcion = str(request.form.get("descripcion") or "").strip()
+
+    if len(nombre) < 2 or len(nombre) > 160:
+        abort(400, description="El nombre debe contener entre 2 y 160 caracteres.")
+    if not pais or len(pais) > 80:
+        abort(400, description="El país no es válido.")
+    if "/" not in zona_horaria or len(zona_horaria) > 80:
+        abort(400, description="La zona horaria no es válida.")
+    if len(ciudad) > 120 or len(descripcion) > 500:
+        abort(400, description="Uno de los campos supera el límite permitido.")
+
+    previous_name = church.nombre
+    church.nombre = nombre
+    church.ciudad = ciudad or None
+    church.pais = pais
+    church.zona_horaria = zona_horaria
+    church.descripcion = descripcion or None
+    # El slug y el estado no son editables aquí porque identifican y habilitan
+    # al tenant; cambiarlos accidentalmente podría cortar el acceso completo.
+    record_audit(
+        church.id,
+        "actualizar_iglesia",
+        "iglesia",
+        church.id,
+        {"nombre_anterior": previous_name, "nombre_nuevo": church.nombre},
+    )
+    db.session.commit()
+    flash("Datos de la iglesia actualizados.", "success")
+    return redirect(url_for("admin.settings"))
 
 
 @admin.post("/admin/membresias/<int:membership_id>/estado")

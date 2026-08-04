@@ -17,7 +17,8 @@ from sqlalchemy import func
 
 from . import db, oauth
 from .audit import record_audit
-from .models import Iglesia, MembresiaIglesia, Persona, Usuario
+from .models import Iglesia, MembresiaIglesia, Usuario
+from .services.access_requests import create_access_request
 
 auth = Blueprint("auth", __name__)
 logger = logging.getLogger(__name__)
@@ -220,25 +221,8 @@ def join_church():
         flash("Ya existe una solicitud o membresía para esta iglesia.", "error")
         return redirect(url_for("auth.join_church"))
 
-    people = Persona.query.filter(
-        Persona.iglesia_id == church.id,
-        Persona.activo.is_(True),
-        func.lower(func.trim(Persona.correo)) == current_user.email,
-    ).all()
-    membership = MembresiaIglesia(
-        usuario=current_user,
-        iglesia=church,
-        rol="usuario",
-        estado="activo" if len(people) == 1 else "pendiente",
-        persona=people[0] if len(people) == 1 else None,
-        fecha_aprobacion=datetime.now() if len(people) == 1 else None,
-    )
-    db.session.add(membership)
+    membership = create_access_request(current_user, church)
     db.session.commit()
-
-    if membership.estado == "activo":
-        session["iglesia_id"] = church.id
-        return redirect(url_for("account.home"))
     flash("Tu solicitud quedó pendiente de revisión por un administrador.", "success")
     return redirect(url_for("auth.join_church"))
 

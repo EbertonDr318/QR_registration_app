@@ -9,14 +9,20 @@
       <h1>Configuración</h1>
     </div>
   </div>
-  <section class="panel profile-details">
-    <dl>
-      <dt>Nombre</dt><dd>{{ iglesia.nombre }}</dd>
-      <dt>Slug</dt><dd>{{ iglesia.slug }}</dd>
-      <dt>Ciudad</dt><dd>{{ iglesia.ciudad or '—' }}</dd>
-      <dt>País</dt><dd>{{ iglesia.pais }}</dd>
-      <dt>Zona horaria</dt><dd>{{ iglesia.zona_horaria }}</dd>
-      <dt>Estado</dt><dd>{{ 'Activa' if iglesia.activa else 'Inactiva' }}</dd>
-    </dl>
+  <section class="panel">
+    <form method="post" action="{{ url_for('admin.update_settings') }}" class="form-grid settings-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label>Nombre<input name="nombre" value="{{ iglesia.nombre }}" maxlength="160" required /></label>
+      <label>Ciudad<input name="ciudad" value="{{ iglesia.ciudad or '' }}" maxlength="120" /></label>
+      <label>País<input name="pais" value="{{ iglesia.pais }}" maxlength="80" required /></label>
+      <label>Zona horaria<input name="zona_horaria" value="{{ iglesia.zona_horaria }}" maxlength="80" required /></label>
+      <label class="full">Descripción<textarea name="descripcion" maxlength="500" rows="4">{{ iglesia.descripcion or '' }}</textarea></label>
+      <div class="readonly-setting full">
+        <span><b>Slug:</b> {{ iglesia.slug }}</span>
+        <span><b>Estado:</b> {{ 'Activa' if iglesia.activa else 'Inactiva' }}</span>
+        <small>El identificador y el estado se protegen para evitar perder el acceso a la iglesia.</small>
+      </div>
+      <div class="full"><button type="submit">Guardar cambios</button></div>
+    </form>
   </section>
 {% endblock %}

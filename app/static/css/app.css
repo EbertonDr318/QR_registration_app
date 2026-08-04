@@ -420,9 +420,50 @@ dialog form {
   display: flex;
   gap: 8px;
 }
+.access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.approve-action {
+  background: #dcfae6;
+  color: var(--ok);
+}
+.reject-action {
+  background: #fee4e2;
+  color: var(--bad);
+}
+.action-hint {
+  color: #93370d;
+  font-weight: 600;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
 .membership-actions select {
   min-width: 150px;
 }
+
+.notice {
+  margin: 0 0 1rem;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid var(--brand);
+  border-radius: 10px;
+  background: #eef3ff;
+  color: var(--muted);
+}
+
+.readonly-setting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem 1.5rem;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #f4f6fa;
+}
+
+.readonly-setting small { width: 100%; }
 .pendiente {
   color: #93370d;
   background: #fffaeb;

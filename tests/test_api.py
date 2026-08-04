@@ -109,45 +109,40 @@ def test_no_membership_goes_to_onboarding(client, app, churches):
     assert b"Iglesia Uno" in page.data and b"Iglesia Dos" in page.data
 
 
-def test_onboarding_unique_email_links_person_as_regular_user(client, app, churches):
+def test_onboarding_creates_pending_person_as_regular_user(client, app, churches):
     with app.app_context():
         church = db.session.get(Iglesia, churches[0])
-        person = create_person(church, correo="join@example.test")
         user = create_user(email="join@example.test")
         user_id = user.id
-        person_id = person.id
         login(client, user)
     response = client.post("/unirse", data={"iglesia_id": churches[0]})
-    assert response.headers["Location"].endswith("/mi-cuenta")
+    assert response.headers["Location"].endswith("/unirse")
     with app.app_context():
         membership = MembresiaIglesia.query.filter_by(usuario_id=user_id).one()
-        assert membership.estado == "activo"
+        assert membership.estado == "pendiente"
         assert membership.rol == "usuario"
-        assert membership.persona_id == person_id
+        assert membership.persona.codigo == "UX-USER-001"
+        assert membership.persona.correo == "join@example.test"
 
 
-def test_onboarding_missing_or_duplicate_email_stays_pending(client, app, churches):
+def test_onboarding_assigns_sequential_codes_without_duplicates(client, app, churches):
     with app.app_context():
         church = db.session.get(Iglesia, churches[0])
-        user = create_user(email="pending@example.test")
-        user_id = user.id
-        login(client, user)
+        first_user = create_user(email="pending@example.test")
+        first_id = first_user.id
+        login(client, first_user)
     client.post("/unirse", data={"iglesia_id": churches[0]})
     with app.app_context():
-        membership = MembresiaIglesia.query.filter_by(usuario_id=user_id).one()
-        assert membership.estado == "pendiente" and membership.persona_id is None
-
-    with app.app_context():
-        church = db.session.get(Iglesia, churches[0])
         second_user = create_user(email="duplicate@example.test")
-        create_person(church, correo="duplicate@example.test", codigo="D-1")
-        create_person(church, correo="DUPLICATE@example.test", codigo="D-2")
         second_id = second_user.id
         login(client, second_user)
     client.post("/unirse", data={"iglesia_id": churches[0]})
     with app.app_context():
+        first = MembresiaIglesia.query.filter_by(usuario_id=first_id).one()
         membership = MembresiaIglesia.query.filter_by(usuario_id=second_id).one()
-        assert membership.estado == "pendiente" and membership.rol == "usuario"
+        assert first.persona.codigo == "UX-USER-001"
+        assert membership.persona.codigo == "UX-USER-002"
+        assert Persona.query.filter_by(iglesia_id=churches[0]).count() == 2
 
 
 def test_admin_lists_only_current_tenant_data(client, app, churches):
@@ -341,6 +336,58 @@ def test_admin_membership_actions_are_scoped_and_audited(client, app, churches):
             ).count()
             == 1
         )
+
+
+def test_admin_updates_only_current_church_settings(client, app, churches):
+    with app.app_context():
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        original_second_name = second.nombre
+        admin_user = create_user()
+        create_membership(admin_user, first, rol="admin")
+        login(client, admin_user, first)
+
+    response = client.post(
+        "/admin/configuracion",
+        data={
+            "nombre": "Iglesia Actualizada",
+            "ciudad": "Mixco",
+            "pais": "Guatemala",
+            "zona_horaria": "America/Guatemala",
+            "descripcion": "Datos editados durante la prueba de usabilidad.",
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(Iglesia, churches[0]).nombre == "Iglesia Actualizada"
+        assert db.session.get(Iglesia, churches[1]).nombre == original_second_name
+        assert (
+            RegistroAuditoria.query.filter_by(
+                iglesia_id=churches[0], accion="actualizar_iglesia"
+            ).count()
+            == 1
+        )
+
+
+def test_membership_page_explains_link_and_preserves_current_values(
+    client, app, churches
+):
+    with app.app_context():
+        church = db.session.get(Iglesia, churches[0])
+        admin_user = create_user()
+        create_membership(admin_user, church, rol="admin")
+        person = create_person(church, codigo="UX-USER-001")
+        create_membership(
+            create_user(), church, person=person, rol="usuario", estado="pendiente"
+        )
+        login(client, admin_user, church)
+    page = client.get("/admin/membresias")
+    assert page.status_code == 200
+    assert b"Autorizar ingreso" in page.data
+    assert b"Rechazar solicitud" in page.data
+    assert b"Ficha asignada: UX-USER-001" in page.data
+    assert b"Cambiar rol" not in page.data
+    assert b"Vincular ficha" not in page.data
 
 
 def test_csrf_protects_api_and_tenant_selection():
