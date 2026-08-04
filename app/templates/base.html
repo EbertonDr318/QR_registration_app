@@ -16,12 +16,14 @@
         </a>
         <button class="menu" type="button" aria-label="Abrir menú">☰</button>
         <nav>
-          {% if current_user.is_admin %}
+          {% if current_membership and current_membership.is_admin %}
             <a href="{{ url_for('web.admin_dashboard') }}">Dashboard</a>
             <a href="{{ url_for('web.admin_people') }}">Personas</a>
             <a href="{{ url_for('web.admin_events') }}">Eventos</a>
             <a href="{{ url_for('web.admin_scanner') }}">Escáner</a>
             <a href="{{ url_for('web.admin_attendance') }}">Historial</a>
+            <a href="{{ url_for('admin.memberships') }}">Membresías</a>
+            <a href="{{ url_for('admin.settings') }}">Configuración</a>
           {% else %}
             <a href="{{ url_for('account.home') }}">Inicio</a>
             <a href="{{ url_for('account.my_qr_page') }}">Mi QR</a>
@@ -34,6 +36,24 @@
             <img src="{{ current_user.foto_url }}" alt="" referrerpolicy="no-referrer" />
           {% endif %}
           <span>{{ current_user.nombre }}</span>
+          {% if active_memberships|length > 1 %}
+            <form method="post" action="{{ url_for('auth.change_church') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <label class="sr-only" for="church-switcher">Cambiar iglesia</label>
+              <select id="church-switcher" name="iglesia_id" onchange="this.form.submit()">
+                {% for membership in active_memberships %}
+                  <option
+                    value="{{ membership.iglesia_id }}"
+                    {% if current_iglesia and current_iglesia.id == membership.iglesia_id %}selected{% endif %}
+                  >
+                    {{ membership.iglesia.nombre }}
+                  </option>
+                {% endfor %}
+              </select>
+            </form>
+          {% elif current_iglesia %}
+            <span class="church-name">{{ current_iglesia.nombre }}</span>
+          {% endif %}
           <form method="post" action="{{ url_for('auth.logout') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <button type="submit">Cerrar sesión</button>

@@ -47,21 +47,30 @@ def upgrade():
             server_default=sa.func.now(),
         ),
         sa.CheckConstraint("rol IN ('usuario', 'admin')", name="ck_usuario_rol"),
-        sa.ForeignKeyConstraint(["persona_id"], ["personas.id"], ondelete="SET NULL"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "proveedor", "proveedor_subject", name="uq_usuario_proveedor_subject"
+        sa.ForeignKeyConstraint(
+            ["persona_id"],
+            ["personas.id"],
+            ondelete="SET NULL",
+            name="fk_usuario_persona",
         ),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_usuarios_activo", "usuarios", ["activo"], unique=False)
     op.create_index("ix_usuarios_email", "usuarios", ["email"], unique=True)
     op.create_index("ix_usuarios_persona_id", "usuarios", ["persona_id"], unique=True)
+    op.create_index(
+        "ix_usuarios_proveedor_subject",
+        "usuarios",
+        ["proveedor_subject"],
+        unique=True,
+    )
     op.create_index("ix_usuarios_rol", "usuarios", ["rol"], unique=False)
 
 
 def downgrade():
     op.drop_index("ix_usuarios_rol", table_name="usuarios")
     op.drop_index("ix_usuarios_persona_id", table_name="usuarios")
+    op.drop_index("ix_usuarios_proveedor_subject", table_name="usuarios")
     op.drop_index("ix_usuarios_email", table_name="usuarios")
     op.drop_index("ix_usuarios_activo", table_name="usuarios")
     op.drop_table("usuarios")

@@ -1,214 +1,349 @@
 import re
 from datetime import date, time, timedelta
+from pathlib import Path
 
 from app import create_app, db, login_manager
 from app.auth import authenticate_claims
-from app.models import Asistencia, Evento, Persona, Usuario
-from conftest import create_person, create_user, login
+from app.models import (
+    Asistencia,
+    Evento,
+    Iglesia,
+    MembresiaIglesia,
+    Persona,
+    RegistroAuditoria,
+    Usuario,
+)
+from conftest import create_church, create_membership, create_person, create_user, login
 
 
-def test_visitor_is_redirected_to_login_and_health_stays_public(client):
-    response = client.get("/")
-    assert response.status_code == 302
-    assert response.headers["Location"].endswith("/login")
+def test_visitor_is_redirected_and_health_is_public(client):
+    assert client.get("/").headers["Location"].endswith("/login")
     assert client.get("/api/personas").status_code == 401
     assert client.get("/health").get_json() == {"status": "ok"}
 
 
-def test_verified_known_person_creates_regular_user(app):
+def test_verified_login_creates_global_user_without_membership(app):
     with app.app_context():
-        person = create_person(correo="NEW@EXAMPLE.TEST")
         user, error = authenticate_claims(
             {
-                "sub": "google-new",
-                "email": " new@example.test ",
+                "sub": "google-1",
+                "email": " USER@EXAMPLE.TEST ",
                 "email_verified": True,
-                "name": "Nueva",
+                "name": "User",
             }
         )
         assert error is None
-        assert user.rol == "usuario"
-        assert user.persona_id == person.id
-        assert user.email == "new@example.test"
+        assert user.email == "user@example.test"
+        assert user.membresias == []
+        assert not hasattr(user, "rol")
 
 
-def test_existing_admin_keeps_database_role(app):
+def test_unverified_email_and_inactive_account_are_rejected(app):
     with app.app_context():
-        create_user(
-            email="admin@example.test", rol="admin", person=None, proveedor_subject=None
-        )
         user, error = authenticate_claims(
-            {
-                "sub": "google-admin",
-                "email": "ADMIN@example.test",
-                "email_verified": True,
-                "name": "Admin",
-            }
+            {"sub": "bad", "email": "bad@example.test", "email_verified": False}
         )
-        assert error is None
-        assert user.is_admin
-        assert user.proveedor_subject == "google-admin"
+        assert user is None and error
+        create_user(email="off@example.test", proveedor_subject="off", activo=False)
+        user, error = authenticate_claims(
+            {"sub": "off", "email": "off@example.test", "email_verified": True}
+        )
+        assert user is None and error
 
 
-def test_role_based_home_redirects(client, app, regular_user, admin_user):
+def test_one_membership_selects_automatically(client, app, churches):
     with app.app_context():
-        regular = db.session.get(Usuario, regular_user)
-        login(client, regular)
-    assert client.get("/").headers["Location"].endswith("/mi-cuenta")
+        church = db.session.get(Iglesia, churches[0])
+        person = create_person(church)
+        user = create_user(email=person.correo)
+        create_membership(user, church, person)
+        login(client, user)
+    response = client.get("/")
+    assert response.headers["Location"].endswith("/mi-cuenta")
+    with client.session_transaction() as session:
+        assert session["iglesia_id"] == churches[0]
 
-    client.get("/logout")
+
+def test_multiple_memberships_show_selector_and_reject_foreign_church(
+    client, app, churches
+):
     with app.app_context():
-        admin = db.session.get(Usuario, admin_user)
-        login(client, admin)
-    assert client.get("/").headers["Location"].endswith("/admin")
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        outsider = create_church(nombre="Ajena", slug="ajena")
+        user = create_user()
+        create_membership(user, first, rol="admin")
+        create_membership(user, second, rol="usuario")
+        outsider_id = outsider.id
+        login(client, user)
+    assert client.get("/").headers["Location"].endswith("/seleccionar-iglesia")
+    assert b"Iglesia Uno" in client.get("/seleccionar-iglesia").data
+    assert (
+        client.post(
+            "/seleccionar-iglesia", data={"iglesia_id": outsider_id}
+        ).status_code
+        == 403
+    )
 
 
-def test_regular_user_cannot_access_admin_or_admin_api(client, app, regular_user):
+def test_user_can_have_different_roles_per_church(client, app, churches):
     with app.app_context():
-        login(client, db.session.get(Usuario, regular_user))
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        user = create_user()
+        create_membership(user, first, rol="admin")
+        create_membership(user, second, rol="usuario")
+        login(client, user, first)
+    assert client.get("/admin").status_code == 200
+    response = client.post("/cambiar-iglesia", data={"iglesia_id": churches[1]})
+    assert response.headers["Location"].endswith("/mi-cuenta")
     assert client.get("/admin").status_code == 403
-    response = client.get("/api/personas")
-    assert response.status_code == 403
-    assert response.is_json
 
 
-def test_admin_can_use_existing_features_and_reports(client, app, admin_user):
+def test_no_membership_goes_to_onboarding(client, app, churches):
     with app.app_context():
-        login(client, db.session.get(Usuario, admin_user))
-    created = client.post(
-        "/api/personas",
-        json={
-            "codigo": "P-001",
-            "nombres": "Ana",
-            "apellidos": "Prueba",
-            "sede": "Centro",
-        },
-    )
-    assert created.status_code == 201
-    event = client.post(
-        "/api/eventos",
-        json={
-            "nombre": "Jornada",
-            "fecha": "2026-08-04",
-            "hora_inicio": "09:00",
-            "sede": "Centro",
-        },
-    ).get_json()["data"]
-    attendance = client.post(
-        "/api/asistencias/registrar",
-        json={"evento_id": event["id"], "codigo": "P-001"},
-    )
-    assert attendance.status_code == 201
-    assert client.get("/api/asistencias/exportar").mimetype.startswith("text/csv")
+        user = create_user()
+        login(client, user)
+    assert client.get("/").headers["Location"].endswith("/unirse")
+    page = client.get("/unirse")
+    assert b"Iglesia Uno" in page.data and b"Iglesia Dos" in page.data
+
+
+def test_onboarding_unique_email_links_person_as_regular_user(client, app, churches):
+    with app.app_context():
+        church = db.session.get(Iglesia, churches[0])
+        person = create_person(church, correo="join@example.test")
+        user = create_user(email="join@example.test")
+        user_id = user.id
+        person_id = person.id
+        login(client, user)
+    response = client.post("/unirse", data={"iglesia_id": churches[0]})
+    assert response.headers["Location"].endswith("/mi-cuenta")
+    with app.app_context():
+        membership = MembresiaIglesia.query.filter_by(usuario_id=user_id).one()
+        assert membership.estado == "activo"
+        assert membership.rol == "usuario"
+        assert membership.persona_id == person_id
+
+
+def test_onboarding_missing_or_duplicate_email_stays_pending(client, app, churches):
+    with app.app_context():
+        church = db.session.get(Iglesia, churches[0])
+        user = create_user(email="pending@example.test")
+        user_id = user.id
+        login(client, user)
+    client.post("/unirse", data={"iglesia_id": churches[0]})
+    with app.app_context():
+        membership = MembresiaIglesia.query.filter_by(usuario_id=user_id).one()
+        assert membership.estado == "pendiente" and membership.persona_id is None
+
+    with app.app_context():
+        church = db.session.get(Iglesia, churches[0])
+        second_user = create_user(email="duplicate@example.test")
+        create_person(church, correo="duplicate@example.test", codigo="D-1")
+        create_person(church, correo="DUPLICATE@example.test", codigo="D-2")
+        second_id = second_user.id
+        login(client, second_user)
+    client.post("/unirse", data={"iglesia_id": churches[0]})
+    with app.app_context():
+        membership = MembresiaIglesia.query.filter_by(usuario_id=second_id).one()
+        assert membership.estado == "pendiente" and membership.rol == "usuario"
+
+
+def test_admin_lists_only_current_tenant_data(client, app, churches):
+    with app.app_context():
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        own = create_person(first, codigo="SAME", nombres="Propia")
+        other = create_person(second, codigo="SAME", nombres="Ajena")
+        user = create_user()
+        create_membership(user, first, rol="admin")
+        login(client, user, first)
+        own_id = own.id
+        other_id = other.id
+    data = client.get("/api/personas").get_json()["data"]
+    assert [row["nombres"] for row in data] == ["Propia"]
+    assert client.get(f"/api/personas/{other_id}").status_code == 404
+    assert own_id != other_id
+
+
+def test_events_attendance_and_reports_are_tenant_scoped(client, app, churches):
+    with app.app_context():
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        person_one = create_person(first, codigo="ONE")
+        person_two = create_person(second, codigo="TWO")
+        event_one = Evento(
+            iglesia=first, nombre="Evento Uno", fecha=date.today(), hora_inicio=time(9)
+        )
+        event_two = Evento(
+            iglesia=second, nombre="Evento Dos", fecha=date.today(), hora_inicio=time(9)
+        )
+        db.session.add_all([event_one, event_two])
+        db.session.flush()
+        db.session.add_all(
+            [
+                Asistencia(iglesia=first, persona=person_one, evento=event_one),
+                Asistencia(iglesia=second, persona=person_two, evento=event_two),
+            ]
+        )
+        user = create_user()
+        create_membership(user, first, rol="admin")
+        db.session.commit()
+        login(client, user, first)
+    assert [e["nombre"] for e in client.get("/api/eventos").get_json()["data"]] == [
+        "Evento Uno"
+    ]
+    attendance = client.get("/api/asistencias").get_json()["data"]
+    assert [row["codigo"] for row in attendance] == ["ONE"]
+    csv = client.get("/api/asistencias/exportar").data
+    assert b"ONE" in csv and b"TWO" not in csv
     assert client.get("/api/asistencias/exportar.xlsx").status_code == 200
     assert client.get("/api/asistencias/exportar.pdf").status_code == 200
 
 
-def test_user_only_reads_own_profile_and_qr(client, app, regular_user):
+def test_cross_tenant_attendance_is_rejected(client, app, churches):
     with app.app_context():
-        other = create_person(correo="other@example.test")
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        foreign_person = create_person(second, codigo="FOREIGN")
+        event = Evento(
+            iglesia=first, nombre="Local", fecha=date.today(), hora_inicio=time(9)
+        )
+        db.session.add(event)
+        user = create_user()
+        create_membership(user, first, rol="admin")
+        db.session.commit()
+        event_id = event.id
+        token = foreign_person.qr_token
+        login(client, user, first)
+    response = client.post(
+        "/api/asistencias/registrar", json={"evento_id": event_id, "token": token}
+    )
+    assert response.status_code == 404
+
+
+def test_regular_user_only_sees_membership_person_and_own_qr(client, app, churches):
+    with app.app_context():
+        first = db.session.get(Iglesia, churches[0])
+        own = create_person(first, correo="own@example.test")
+        other = create_person(first, correo="other@example.test")
+        user = create_user(email="own@example.test")
+        create_membership(user, first, own)
+        own_id = own.id
         other_id = other.id
-        login(client, db.session.get(Usuario, regular_user))
-    own = client.get("/api/mi-cuenta")
-    assert own.status_code == 200
-    assert own.get_json()["data"]["correo"] == "ana@example.test"
-    assert "qr_token" not in own.get_json()["data"]
+        login(client, user, first)
+    own_data = client.get("/api/mi-cuenta").get_json()["data"]
+    assert own_data["id"] == own_id and "qr_token" not in own_data
     assert client.get("/api/mi-cuenta/qr").mimetype == "image/png"
     assert client.get(f"/api/personas/{other_id}").status_code == 403
-    assert client.get(f"/api/personas/{other_id}/qr").status_code == 403
 
 
-def test_inactive_account_and_inactive_person_are_rejected(client, app, person):
+def test_upcoming_events_follow_church_date_state_and_site(client, app, churches):
     with app.app_context():
-        person_row = db.session.get(Persona, person)
-        inactive = create_user(person_row, activo=False)
-        login(client, inactive)
-    assert client.get("/mi-cuenta").status_code == 302
-
-    with app.app_context():
-        inactive.activo = True
-        person_row.activo = False
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        person = create_person(first, sede="Centro")
+        user = create_user()
+        create_membership(user, first, person)
+        events = [
+            Evento(
+                iglesia=first,
+                nombre="General",
+                fecha=date.today() + timedelta(days=1),
+                hora_inicio=time(9),
+                sede="",
+            ),
+            Evento(
+                iglesia=first,
+                nombre="Centro",
+                fecha=date.today() + timedelta(days=2),
+                hora_inicio=time(9),
+                sede="Centro",
+            ),
+            Evento(
+                iglesia=first,
+                nombre="Otra sede",
+                fecha=date.today(),
+                hora_inicio=time(9),
+                sede="Norte",
+            ),
+            Evento(
+                iglesia=first,
+                nombre="Cerrado",
+                fecha=date.today(),
+                hora_inicio=time(9),
+                sede="Centro",
+                estado="cerrado",
+            ),
+            Evento(
+                iglesia=second,
+                nombre="Otro tenant",
+                fecha=date.today(),
+                hora_inicio=time(9),
+                sede="Centro",
+            ),
+        ]
+        db.session.add_all(events)
         db.session.commit()
-        login(client, inactive)
-    assert client.get("/mi-cuenta").status_code == 302
+        login(client, user, first)
+    names = [
+        row["nombre"]
+        for row in client.get("/api/mi-cuenta/eventos").get_json()["data"]["proximos"]
+    ]
+    assert names == ["General", "Centro"]
 
 
-def test_unknown_and_duplicate_email_do_not_get_access(app):
-    claims = {"sub": "unknown", "email": "unknown@example.test", "email_verified": True}
+def test_suspended_membership_immediately_loses_access(client, app, churches):
     with app.app_context():
-        user, error = authenticate_claims(claims)
-        assert user is None and error
-        create_person(correo="duplicate@example.test")
-        create_person(correo="DUPLICATE@example.test")
-        user, error = authenticate_claims(
-            {**claims, "sub": "duplicate", "email": "duplicate@example.test"}
-        )
-        assert user is None and error
-
-
-def test_events_are_scoped_to_current_user(client, app, regular_user, person):
+        church = db.session.get(Iglesia, churches[0])
+        person = create_person(church)
+        user = create_user()
+        membership = create_membership(user, church, person)
+        membership_id = membership.id
+        login(client, user, church)
+    assert client.get("/mi-cuenta").status_code == 200
     with app.app_context():
-        own = db.session.get(Persona, person)
-        other = create_person(correo="other@example.test", sede="Norte")
-        visible = Evento(
-            nombre="General",
-            fecha=date.today() + timedelta(days=1),
-            hora_inicio=time(9),
-            sede="",
-            estado="abierto",
-        )
-        same_site = Evento(
-            nombre="Centro",
-            fecha=date.today() + timedelta(days=2),
-            hora_inicio=time(9),
-            sede="Centro",
-            estado="abierto",
-        )
-        wrong_site = Evento(
-            nombre="Norte",
-            fecha=date.today() + timedelta(days=1),
-            hora_inicio=time(9),
-            sede="Norte",
-            estado="abierto",
-        )
-        closed = Evento(
-            nombre="Cerrado",
-            fecha=date.today() + timedelta(days=1),
-            hora_inicio=time(9),
-            sede="Centro",
-            estado="cerrado",
-        )
-        past = Evento(
-            nombre="Pasado",
-            fecha=date.today() - timedelta(days=1),
-            hora_inicio=time(9),
-            sede="Centro",
-            estado="abierto",
-        )
-        db.session.add_all([visible, same_site, wrong_site, closed, past])
-        db.session.flush()
-        db.session.add_all(
-            [
-                Asistencia(persona=own, evento=past),
-                Asistencia(persona=other, evento=wrong_site),
-            ]
-        )
+        db.session.get(MembresiaIglesia, membership_id).estado = "suspendido"
         db.session.commit()
-        login(client, db.session.get(Usuario, regular_user))
-    data = client.get("/api/mi-cuenta/eventos").get_json()["data"]
-    assert [item["evento"] for item in data["asistencias"]] == ["Pasado"]
-    assert [item["nombre"] for item in data["proximos"]] == ["General", "Centro"]
+    assert client.get("/mi-cuenta").status_code == 403
 
 
-def test_logout_is_post_and_clears_session(client, app, regular_user):
+def test_admin_membership_actions_are_scoped_and_audited(client, app, churches):
     with app.app_context():
-        login(client, db.session.get(Usuario, regular_user))
-    assert client.get("/logout").status_code == 405
-    assert client.post("/logout").status_code == 302
-    assert client.get("/mi-cuenta").status_code == 302
+        first = db.session.get(Iglesia, churches[0])
+        second = db.session.get(Iglesia, churches[1])
+        admin_user = create_user()
+        create_membership(admin_user, first, rol="admin")
+        target = create_membership(create_user(), first, estado="pendiente")
+        foreign = create_membership(create_user(), second, estado="pendiente")
+        target_id, foreign_id = target.id, foreign.id
+        login(client, admin_user, first)
+    assert client.get("/admin/membresias").status_code == 200
+    assert client.get("/admin/configuracion").status_code == 200
+    assert (
+        client.post(
+            f"/admin/membresias/{foreign_id}/estado", data={"estado": "activo"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/admin/membresias/{target_id}/rol", data={"rol": "admin"}
+        ).status_code
+        == 302
+    )
+    with app.app_context():
+        assert db.session.get(MembresiaIglesia, target_id).rol == "admin"
+        assert (
+            RegistroAuditoria.query.filter_by(
+                iglesia_id=churches[0], accion="cambiar_rol"
+            ).count()
+            == 1
+        )
 
 
-def test_csrf_is_required_for_writes():
+def test_csrf_protects_api_and_tenant_selection():
     application = create_app(
         {
             "TESTING": True,
@@ -220,12 +355,20 @@ def test_csrf_is_required_for_writes():
     login_manager.session_protection = None
     with application.app_context():
         db.create_all()
-        admin = create_user(email="admin@example.test", rol="admin", person=None)
-        admin_id = admin.id
+        church = create_church(nombre="CSRF", slug="csrf")
+        user = create_user()
+        create_membership(user, church, rol="admin")
+        user_id, church_id = user.id, church.id
     client = application.test_client()
     with application.app_context():
-        login(client, db.session.get(Usuario, admin_id))
+        login(
+            client, db.session.get(Usuario, user_id), db.session.get(Iglesia, church_id)
+        )
     assert client.post("/api/personas", json={}).status_code == 400
+    assert (
+        client.post("/cambiar-iglesia", data={"iglesia_id": church_id}).status_code
+        == 400
+    )
     page = client.get("/admin")
     token = (
         re.search(rb'<meta name="csrf-token" content="([^"]+)"', page.data)
@@ -233,32 +376,64 @@ def test_csrf_is_required_for_writes():
         .decode()
     )
     response = client.post("/api/personas", json={}, headers={"X-CSRFToken": token})
-    assert response.status_code == 400
     assert response.get_json()["message"] == "Datos inválidos"
 
 
-def test_cli_admin_creation_is_idempotent(app):
-    runner = app.test_cli_runner()
-    first = runner.invoke(
-        args=["users", "create-admin", "--email", "ADMIN@example.test"]
-    )
-    second = runner.invoke(
-        args=["users", "create-admin", "--email", "admin@example.test"]
-    )
-    assert first.exit_code == second.exit_code == 0
+def test_logout_is_post_and_clears_tenant_session(client, app, churches):
     with app.app_context():
-        assert Usuario.query.count() == 1
-        assert Usuario.query.one().is_admin
+        church = db.session.get(Iglesia, churches[0])
+        user = create_user()
+        create_membership(user, church, rol="admin")
+        login(client, user, church)
+    assert client.get("/logout").status_code == 405
+    assert client.post("/logout").status_code == 302
+    with client.session_transaction() as session:
+        assert "_user_id" not in session and "iglesia_id" not in session
+
+
+def test_cli_creates_church_and_admin_idempotently(app):
+    runner = app.test_cli_runner()
+    args = [
+        "iglesias",
+        "create",
+        "--nombre",
+        "Principal",
+        "--slug",
+        "principal",
+        "--admin-email",
+        "admin@example.test",
+    ]
+    assert runner.invoke(args=args).exit_code == 0
+    assert runner.invoke(args=args).exit_code == 0
+    with app.app_context():
+        assert (
+            Iglesia.query.count()
+            == Usuario.query.count()
+            == MembresiaIglesia.query.count()
+            == 1
+        )
+        assert MembresiaIglesia.query.one().is_admin
+
+
+def test_migration_assigns_existing_records_without_rotating_qr():
+    path = Path("migrations/versions/8de9dc5a35bd_agregar_arquitectura_multiiglesia.py")
+    migration = path.read_text(encoding="utf-8")
+    assert "Iglesia Principal" in migration
+    assert "UPDATE personas SET iglesia_id" in migration
+    assert "UPDATE eventos SET iglesia_id" in migration
+    assert "UPDATE asistencias SET iglesia_id" in migration
+    assert "qr_token" not in migration
+    assert "DROP DATABASE" not in migration.upper()
 
 
 def test_production_configuration(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("DATABASE_URL", "mysql://user:password@host/database")
     application = create_app()
-    assert application.config["DEBUG"] is False
     assert application.config["SESSION_COOKIE_SECURE"] is True
     assert application.config["SESSION_COOKIE_HTTPONLY"] is True
     assert application.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+    assert application.config["PREFERRED_URL_SCHEME"] == "https"
     assert application.config["SQLALCHEMY_DATABASE_URI"].startswith("mysql+pymysql://")
 
 

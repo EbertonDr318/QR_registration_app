@@ -4,8 +4,9 @@ from flask import Blueprint, jsonify, request, send_file
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from . import db
+from .audit import record_audit
 from .models import Persona, Evento, Asistencia
-from .permissions import admin_required
+from .permissions import admin_required, get_current_iglesia
 
 api = Blueprint("api", __name__)
 EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -54,7 +55,7 @@ def persona_data(payload, partial=False):
 @api.get("/personas")
 @admin_required
 def personas_list():
-    query = Persona.query
+    query = Persona.query.filter_by(iglesia_id=get_current_iglesia().id)
     q = clean(request.args.get("q"), 100)
     if q:
         query = query.filter(
@@ -78,7 +79,9 @@ def personas_list():
 @api.get("/personas/<int:pid>")
 @admin_required
 def persona_get(pid):
-    p = db.get_or_404(Persona, pid)
+    p = Persona.query.filter_by(
+        id=pid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     return ok("Persona consultada", p.to_dict())
 
 
@@ -88,7 +91,11 @@ def persona_create():
     data, errors = persona_data(request.get_json(silent=True) or {})
     if errors:
         return fail("Datos inválidos", errors=errors)
-    p = Persona(**data, qr_token=secrets.token_urlsafe(32))
+    p = Persona(
+        **data,
+        iglesia_id=get_current_iglesia().id,
+        qr_token=secrets.token_urlsafe(32),
+    )
     db.session.add(p)
     try:
         db.session.commit()
@@ -101,7 +108,9 @@ def persona_create():
 @api.put("/personas/<int:pid>")
 @admin_required
 def persona_update(pid):
-    p = db.get_or_404(Persona, pid)
+    p = Persona.query.filter_by(
+        id=pid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     data, errors = persona_data(request.get_json(silent=True) or {})
     if errors:
         return fail("Datos inválidos", errors=errors)
@@ -118,7 +127,9 @@ def persona_update(pid):
 @api.patch("/personas/<int:pid>/estado")
 @admin_required
 def persona_estado(pid):
-    p = db.get_or_404(Persona, pid)
+    p = Persona.query.filter_by(
+        id=pid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     p.activo = bool((request.get_json(silent=True) or {}).get("activo"))
     db.session.commit()
     return ok("Estado actualizado", p.to_dict())
@@ -127,8 +138,17 @@ def persona_estado(pid):
 @api.post("/personas/<int:pid>/regenerar-qr")
 @admin_required
 def persona_regenerar(pid):
-    p = db.get_or_404(Persona, pid)
+    p = Persona.query.filter_by(
+        id=pid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     p.qr_token = secrets.token_urlsafe(32)
+    record_audit(
+        p.iglesia_id,
+        "regenerar_qr",
+        "persona",
+        p.id,
+        {"codigo": p.codigo},
+    )
     db.session.commit()
     return ok("Token QR regenerado", p.to_dict())
 
@@ -138,7 +158,9 @@ def persona_regenerar(pid):
 def persona_qr(pid):
     import qrcode
 
-    p = db.get_or_404(Persona, pid)
+    p = Persona.query.filter_by(
+        id=pid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     image = qrcode.make(p.qr_token)
     stream = io.BytesIO()
     image.save(stream, format="PNG")
@@ -176,16 +198,25 @@ def event_data(payload):
 @api.get("/eventos")
 @admin_required
 def eventos_list():
+    church = get_current_iglesia()
     return ok(
         "Eventos consultados",
-        [e.to_dict() for e in Evento.query.order_by(Evento.fecha.desc()).all()],
+        [
+            e.to_dict()
+            for e in Evento.query.filter_by(iglesia_id=church.id)
+            .order_by(Evento.fecha.desc())
+            .all()
+        ],
     )
 
 
 @api.get("/eventos/<int:eid>")
 @admin_required
 def evento_get(eid):
-    return ok("Evento consultado", db.get_or_404(Evento, eid).to_dict())
+    event = Evento.query.filter_by(
+        id=eid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
+    return ok("Evento consultado", event.to_dict())
 
 
 @api.post("/eventos")
@@ -194,8 +225,10 @@ def evento_create():
     data, errors = event_data(request.get_json(silent=True) or {})
     if errors:
         return fail("Datos inválidos", errors=errors)
-    e = Evento(**data)
+    e = Evento(**data, iglesia_id=get_current_iglesia().id)
     db.session.add(e)
+    db.session.flush()
+    record_audit(e.iglesia_id, "crear_evento", "evento", e.id, {"nombre": e.nombre})
     db.session.commit()
     return ok("Evento creado", e.to_dict(), 201)
 
@@ -203,13 +236,16 @@ def evento_create():
 @api.put("/eventos/<int:eid>")
 @admin_required
 def evento_update(eid):
-    e = db.get_or_404(Evento, eid)
+    e = Evento.query.filter_by(
+        id=eid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     data, errors = event_data(request.get_json(silent=True) or {})
     if errors:
         return fail("Datos inválidos", errors=errors)
     data["estado"] = e.estado
     for k, v in data.items():
         setattr(e, k, v)
+    record_audit(e.iglesia_id, "modificar_evento", "evento", e.id, {"nombre": e.nombre})
     db.session.commit()
     return ok("Evento actualizado", e.to_dict())
 
@@ -217,11 +253,20 @@ def evento_update(eid):
 @api.patch("/eventos/<int:eid>/estado")
 @admin_required
 def evento_estado(eid):
-    e = db.get_or_404(Evento, eid)
+    e = Evento.query.filter_by(
+        id=eid, iglesia_id=get_current_iglesia().id
+    ).first_or_404()
     estado = (request.get_json(silent=True) or {}).get("estado")
     if estado not in ("abierto", "cerrado"):
         return fail("Estado inválido")
     e.estado = estado
+    record_audit(
+        e.iglesia_id,
+        "cambiar_estado_evento",
+        "evento",
+        e.id,
+        {"estado": estado},
+    )
     db.session.commit()
     return ok("Estado actualizado", e.to_dict())
 
@@ -233,7 +278,8 @@ def registrar():
     eid = payload.get("evento_id")
     if not eid:
         return fail("Evento no seleccionado")
-    evento = db.session.get(Evento, eid)
+    church = get_current_iglesia()
+    evento = Evento.query.filter_by(id=eid, iglesia_id=church.id).first()
     if not evento:
         return fail("Evento inexistente", 404)
     if evento.estado != "abierto":
@@ -241,16 +287,19 @@ def registrar():
     token = clean(payload.get("token"), 128)
     codigo = clean(payload.get("codigo"), 30)
     persona = (
-        Persona.query.filter_by(qr_token=token).first()
+        Persona.query.filter_by(iglesia_id=church.id, qr_token=token).first()
         if token
-        else Persona.query.filter_by(codigo=codigo).first()
+        else Persona.query.filter_by(iglesia_id=church.id, codigo=codigo).first()
     )
     if not persona:
         return fail("Código QR inválido" if token else "Persona inexistente", 404)
     if not persona.activo:
         return fail("Persona inactiva", 409)
     a = Asistencia(
-        persona=persona, evento=evento, metodo_registro="qr" if token else "manual"
+        iglesia_id=church.id,
+        persona=persona,
+        evento=evento,
+        metodo_registro="qr" if token else "manual",
     )
     db.session.add(a)
     try:
@@ -262,7 +311,11 @@ def registrar():
 
 
 def attendance_query():
-    query = Asistencia.query.join(Persona).join(Evento)
+    query = (
+        Asistencia.query.filter(Asistencia.iglesia_id == get_current_iglesia().id)
+        .join(Persona)
+        .join(Evento)
+    )
     q = clean(request.args.get("q"), 100)
     if q:
         query = query.filter(
@@ -303,11 +356,14 @@ def asistencias_list():
 @api.get("/asistencias/recientes")
 @admin_required
 def recientes():
+    church = get_current_iglesia()
     return ok(
         "Asistencias recientes",
         [
             a.to_dict()
-            for a in Asistencia.query.order_by(Asistencia.fecha_hora.desc()).limit(10)
+            for a in Asistencia.query.filter_by(iglesia_id=church.id)
+            .order_by(Asistencia.fecha_hora.desc())
+            .limit(10)
         ],
     )
 

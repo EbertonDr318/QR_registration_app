@@ -9,13 +9,15 @@ from flask import (
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
-from flask_login import current_user, login_user, logout_user
+from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 
 from . import db, oauth
-from .models import Persona, Usuario
+from .audit import record_audit
+from .models import Iglesia, MembresiaIglesia, Persona, Usuario
 
 auth = Blueprint("auth", __name__)
 logger = logging.getLogger(__name__)
@@ -31,12 +33,36 @@ def _safe_next_url(target):
     return None
 
 
-def _destination(user):
-    return url_for("web.admin_dashboard" if user.is_admin else "account.home")
+def _membership_destination(membership):
+    return url_for("web.admin_dashboard" if membership.is_admin else "account.home")
+
+
+def _active_memberships(user):
+    return (
+        MembresiaIglesia.query.join(Iglesia)
+        .filter(
+            MembresiaIglesia.usuario_id == user.id,
+            MembresiaIglesia.estado == "activo",
+            Iglesia.activa.is_(True),
+        )
+        .order_by(Iglesia.nombre)
+        .all()
+    )
+
+
+def destination_after_login(user):
+    memberships = _active_memberships(user)
+    session.pop("iglesia_id", None)
+    if len(memberships) == 1:
+        session["iglesia_id"] = memberships[0].iglesia_id
+        return _membership_destination(memberships[0])
+    if len(memberships) > 1:
+        return url_for("auth.select_church")
+    return url_for("auth.join_church")
 
 
 def authenticate_claims(claims):
-    """Valida claims OIDC y devuelve (usuario, error) sin depender de Google."""
+    """Valida claims OIDC sin aceptar roles ni identificadores del navegador."""
     email = Usuario.normalize_email(claims.get("email"))
     subject = str(claims.get("sub") or "").strip()
     if not email or not subject or claims.get("email_verified") is not True:
@@ -47,41 +73,18 @@ def authenticate_claims(claims):
     ).first()
     if not user:
         user = Usuario.query.filter(func.lower(Usuario.email) == email).first()
-
     if not user:
-        people = Persona.query.filter(
-            Persona.activo.is_(True),
-            func.lower(func.trim(Persona.correo)) == email,
-        ).all()
-        if len(people) != 1:
-            reason = (
-                "correo duplicado" if len(people) > 1 else "correo sin persona activa"
-            )
-            logger.warning("Acceso OIDC rechazado: %s (%s)", reason, email)
-            return (
-                None,
-                "Tu cuenta todavía no está habilitada. Contacta a un administrador.",
-            )
-        person = people[0]
-        if person.usuario:
-            return None, "La persona ya está vinculada a otra cuenta."
         user = Usuario(
             email=email,
-            nombre=str(claims.get("name") or f"{person.nombres} {person.apellidos}")[
-                :160
-            ],
+            nombre=str(claims.get("name") or email)[:160],
             proveedor="google",
             proveedor_subject=subject,
-            rol="usuario",
-            persona=person,
             activo=True,
         )
         db.session.add(user)
 
     if not user.activo:
         return None, "Esta cuenta está inactiva."
-    if user.is_regular_user and (not user.persona or not user.persona.activo):
-        return None, "El perfil personal asociado está inactivo."
 
     user.email = email
     user.nombre = str(claims.get("name") or user.nombre)[:160]
@@ -96,7 +99,7 @@ def authenticate_claims(claims):
 @auth.get("/login")
 def login():
     if current_user.is_authenticated:
-        return redirect(_destination(current_user))
+        return redirect(destination_after_login(current_user))
     return render_template("auth/login.html")
 
 
@@ -124,15 +127,116 @@ def google_callback():
         flash(error, "error")
         return redirect(url_for("auth.login"))
 
+    session.clear()
     login_user(user)
     logger.info("Acceso correcto por Google para usuario id=%s", user.id)
-    target = _safe_next_url(request.args.get("next"))
-    return redirect(target or _destination(user))
+    return redirect(destination_after_login(user))
+
+
+@auth.get("/seleccionar-iglesia")
+@login_required
+def select_church():
+    memberships = _active_memberships(current_user)
+    if len(memberships) == 1:
+        session["iglesia_id"] = memberships[0].iglesia_id
+        return redirect(_membership_destination(memberships[0]))
+    if not memberships:
+        return redirect(url_for("auth.join_church"))
+    return render_template("auth/select_church.html", memberships=memberships)
+
+
+def _select_authorized_church(iglesia_id):
+    membership = (
+        MembresiaIglesia.query.join(Iglesia)
+        .filter(
+            MembresiaIglesia.usuario_id == current_user.id,
+            MembresiaIglesia.iglesia_id == iglesia_id,
+            MembresiaIglesia.estado == "activo",
+            Iglesia.activa.is_(True),
+        )
+        .first()
+    )
+    if not membership:
+        return None
+
+    previous = session.get("iglesia_id")
+    session["iglesia_id"] = membership.iglesia_id
+    if previous and previous != membership.iglesia_id:
+        record_audit(
+            membership.iglesia_id,
+            "cambiar_iglesia",
+            "iglesia",
+            membership.iglesia_id,
+            {"iglesia_anterior_id": previous},
+        )
+        db.session.commit()
+    return membership
+
+
+@auth.post("/seleccionar-iglesia")
+@login_required
+def select_church_post():
+    membership = _select_authorized_church(request.form.get("iglesia_id", type=int))
+    if not membership:
+        return render_template("errors/403.html"), 403
+    return redirect(_membership_destination(membership))
+
+
+@auth.post("/cambiar-iglesia")
+@login_required
+def change_church():
+    membership = _select_authorized_church(request.form.get("iglesia_id", type=int))
+    if not membership:
+        return render_template("errors/403.html"), 403
+    return redirect(_membership_destination(membership))
+
+
+@auth.route("/unirse", methods=["GET", "POST"])
+@login_required
+def join_church():
+    churches = Iglesia.query.filter_by(activa=True).order_by(Iglesia.nombre).all()
+    if request.method == "GET":
+        return render_template("auth/join_church.html", churches=churches)
+
+    iglesia_id = request.form.get("iglesia_id", type=int)
+    church = Iglesia.query.filter_by(id=iglesia_id, activa=True).first()
+    if not church:
+        return render_template("errors/403.html"), 403
+
+    existing = MembresiaIglesia.query.filter_by(
+        usuario_id=current_user.id, iglesia_id=church.id
+    ).first()
+    if existing:
+        flash("Ya existe una solicitud o membresía para esta iglesia.", "error")
+        return redirect(url_for("auth.join_church"))
+
+    people = Persona.query.filter(
+        Persona.iglesia_id == church.id,
+        Persona.activo.is_(True),
+        func.lower(func.trim(Persona.correo)) == current_user.email,
+    ).all()
+    membership = MembresiaIglesia(
+        usuario=current_user,
+        iglesia=church,
+        rol="usuario",
+        estado="activo" if len(people) == 1 else "pendiente",
+        persona=people[0] if len(people) == 1 else None,
+        fecha_aprobacion=datetime.now() if len(people) == 1 else None,
+    )
+    db.session.add(membership)
+    db.session.commit()
+
+    if membership.estado == "activo":
+        session["iglesia_id"] = church.id
+        return redirect(url_for("account.home"))
+    flash("Tu solicitud quedó pendiente de revisión por un administrador.", "success")
+    return redirect(url_for("auth.join_church"))
 
 
 @auth.post("/logout")
 def logout():
     if current_user.is_authenticated:
         logger.info("Cierre de sesión para usuario id=%s", current_user.id)
+    session.clear()
     logout_user()
     return redirect(url_for("auth.login"))

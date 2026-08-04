@@ -3,7 +3,7 @@ import secrets
 import pytest
 
 from app import create_app, db, login_manager
-from app.models import Evento, Persona, Usuario
+from app.models import Iglesia, MembresiaIglesia, Persona, Usuario
 
 
 @pytest.fixture()
@@ -30,8 +30,24 @@ def client(app):
     return app.test_client()
 
 
-def create_person(**overrides):
+def create_church(**overrides):
     values = {
+        "nombre": f"Iglesia {secrets.token_hex(2)}",
+        "slug": f"iglesia-{secrets.token_hex(3)}",
+        "ciudad": "Guatemala",
+        "pais": "Guatemala",
+        "activa": True,
+    }
+    values.update(overrides)
+    church = Iglesia(**values)
+    db.session.add(church)
+    db.session.commit()
+    return church
+
+
+def create_person(church, **overrides):
+    values = {
+        "iglesia_id": church.id,
         "codigo": f"P-{secrets.token_hex(3)}",
         "nombres": "Ana",
         "apellidos": "Prueba",
@@ -48,15 +64,13 @@ def create_person(**overrides):
     return person
 
 
-def create_user(person=None, **overrides):
+def create_user(**overrides):
     values = {
-        "email": "ana@example.test",
-        "nombre": "Ana Prueba",
-        "rol": "usuario",
+        "email": f"user-{secrets.token_hex(3)}@example.test",
+        "nombre": "Usuario Prueba",
         "activo": True,
         "proveedor": "google",
         "proveedor_subject": f"subject-{secrets.token_hex(3)}",
-        "persona": person,
     }
     values.update(overrides)
     user = Usuario(**values)
@@ -65,48 +79,34 @@ def create_user(person=None, **overrides):
     return user
 
 
-def login(client, user):
+def create_membership(user, church, person=None, **overrides):
+    values = {
+        "usuario_id": user.id,
+        "iglesia_id": church.id,
+        "persona_id": person.id if person else None,
+        "rol": "usuario",
+        "estado": "activo",
+    }
+    values.update(overrides)
+    membership = MembresiaIglesia(**values)
+    db.session.add(membership)
+    db.session.commit()
+    return membership
+
+
+def login(client, user, church=None):
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)
         session["_fresh"] = True
+        if church:
+            session["iglesia_id"] = church.id
+        else:
+            session.pop("iglesia_id", None)
 
 
 @pytest.fixture()
-def person(app):
+def churches(app):
     with app.app_context():
-        person = create_person()
-        return person.id
-
-
-@pytest.fixture()
-def regular_user(app, person):
-    with app.app_context():
-        return create_user(db.session.get(Persona, person)).id
-
-
-@pytest.fixture()
-def admin_user(app):
-    with app.app_context():
-        return create_user(
-            email="admin@example.test",
-            nombre="Admin",
-            rol="admin",
-            person=None,
-        ).id
-
-
-@pytest.fixture()
-def event(app):
-    from datetime import date, time, timedelta
-
-    with app.app_context():
-        event = Evento(
-            nombre="Jornada",
-            fecha=date.today() + timedelta(days=1),
-            hora_inicio=time(9),
-            sede="Centro",
-            estado="abierto",
-        )
-        db.session.add(event)
-        db.session.commit()
-        return event.id
+        first = create_church(nombre="Iglesia Uno", slug="iglesia-uno")
+        second = create_church(nombre="Iglesia Dos", slug="iglesia-dos")
+        return first.id, second.id

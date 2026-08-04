@@ -8,6 +8,7 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -44,9 +45,17 @@ def create_app(test_config=None):
         SESSION_PROTECTION="strong",
         GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID"),
         GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
+        GOOGLE_DISCOVERY_URL=os.getenv(
+            "GOOGLE_DISCOVERY_URL",
+            "https://accounts.google.com/.well-known/openid-configuration",
+        ),
+        PREFERRED_URL_SCHEME="https" if is_production else "http",
     )
     if test_config:
         app.config.update(test_config)
+    if is_production:
+        # Railway finaliza TLS en su proxy; se confía sólo en un salto conocido.
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
@@ -58,7 +67,7 @@ def create_app(test_config=None):
         name="google",
         client_id=app.config.get("GOOGLE_CLIENT_ID"),
         client_secret=app.config.get("GOOGLE_CLIENT_SECRET"),
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        server_metadata_url=app.config["GOOGLE_DISCOVERY_URL"],
         client_kwargs={"scope": "openid email profile"},
     )
 
@@ -85,17 +94,45 @@ def create_app(test_config=None):
 
     from .api import api
     from .account import account
+    from .admin import admin
     from .auth import auth
     from .web import web
 
     app.register_blueprint(api, url_prefix="/api")
     app.register_blueprint(account)
+    app.register_blueprint(admin)
     app.register_blueprint(auth)
     app.register_blueprint(web)
-    from .cli import users_cli
+    from .cli import churches_cli, memberships_cli
 
-    app.cli.add_command(users_cli)
+    app.cli.add_command(churches_cli)
+    app.cli.add_command(memberships_cli)
     logging.basicConfig(level=logging.INFO)
+
+    @app.context_processor
+    def tenant_context():
+        from flask_login import current_user
+
+        from .models import Iglesia, MembresiaIglesia
+        from .permissions import get_current_iglesia, get_current_membership
+
+        memberships = []
+        if current_user.is_authenticated:
+            memberships = (
+                MembresiaIglesia.query.join(Iglesia)
+                .filter(
+                    MembresiaIglesia.usuario_id == current_user.id,
+                    MembresiaIglesia.estado == "activo",
+                    Iglesia.activa.is_(True),
+                )
+                .order_by(Iglesia.nombre)
+                .all()
+            )
+        return {
+            "current_iglesia": get_current_iglesia(),
+            "current_membership": get_current_membership(),
+            "active_memberships": memberships,
+        }
 
     @app.get("/health")
     def health():

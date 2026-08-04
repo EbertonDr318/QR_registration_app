@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración · RMS{% endblock %}
+
+{% block content %}
+  <div class="heading">
+    <div>
+      <p class="eyebrow">IGLESIA</p>
+      <h1>Configuración</h1>
+    </div>
+  </div>
+  <section class="panel profile-details">
+    <dl>
+      <dt>Nombre</dt><dd>{{ iglesia.nombre }}</dd>
+      <dt>Slug</dt><dd>{{ iglesia.slug }}</dd>
+      <dt>Ciudad</dt><dd>{{ iglesia.ciudad or '—' }}</dd>
+      <dt>País</dt><dd>{{ iglesia.pais }}</dd>
+      <dt>Zona horaria</dt><dd>{{ iglesia.zona_horaria }}</dd>
+      <dt>Estado</dt><dd>{{ 'Activa' if iglesia.activa else 'Inactiva' }}</dd>
+    </dl>
+  </section>
+{% endblock %}

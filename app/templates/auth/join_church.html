@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Unirse a una iglesia · RMS{% endblock %}
+
+{% block content %}
+  <section class="login-card tenant-card">
+    <p class="eyebrow">SOLICITAR ACCESO</p>
+    <h1>Selecciona tu iglesia</h1>
+    <p>Si tu correo coincide con un registro activo, el acceso será inmediato.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <p class="alert {{ category }}">{{ message }}</p>
+      {% endfor %}
+    {% endwith %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label>
+        Iglesia
+        <select name="iglesia_id" required>
+          <option value="">Seleccionar…</option>
+          {% for church in churches %}
+            <option value="{{ church.id }}">
+              {{ church.nombre }} · {{ church.ciudad or 'Sin ciudad' }} · {{ church.pais }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="button full" type="submit">Solicitar acceso</button>
+    </form>
+  </section>
+{% endblock %}

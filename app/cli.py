@@ -1,99 +1,203 @@
+import re
+from datetime import datetime
+
 import click
 from flask.cli import AppGroup
 from sqlalchemy import func
 
 from . import db
-from .models import Persona, Usuario
+from .audit import record_audit
+from .models import Iglesia, MembresiaIglesia, Persona, Usuario
 
-users_cli = AppGroup("users", help="Administra cuentas y roles.")
+churches_cli = AppGroup("iglesias", help="Administra iglesias de la plataforma.")
+memberships_cli = AppGroup("membresias", help="Administra membresías por iglesia.")
+SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
-def _user(email):
+def _normalized_email(email):
     normalized = Usuario.normalize_email(email)
-    return Usuario.query.filter(func.lower(Usuario.email) == normalized).first()
+    if "@" not in normalized:
+        raise click.ClickException("El correo no es válido.")
+    return normalized
 
 
-@users_cli.command("create-admin")
-@click.option("--email", required=True)
-@click.option("--name")
-def create_admin(email, name):
-    normalized = Usuario.normalize_email(email)
-    user = _user(normalized)
-    if user:
-        changed = []
-        if not user.is_admin:
-            user.rol = "admin"
-            changed.append("rol admin")
-        if not user.activo:
-            user.activo = True
-            changed.append("cuenta activada")
-        if name:
-            user.nombre = name[:160]
-            changed.append("nombre actualizado")
-        db.session.commit()
-        click.echo(
-            f"Administrador existente: {normalized} ({', '.join(changed) or 'sin cambios'})."
-        )
-        return
-    db.session.add(
-        Usuario(
+def _church(slug):
+    church = Iglesia.query.filter_by(slug=str(slug or "").strip().casefold()).first()
+    if not church:
+        raise click.ClickException("La iglesia no existe.")
+    return church
+
+
+def _user(email, create=False):
+    normalized = _normalized_email(email)
+    user = Usuario.query.filter(func.lower(Usuario.email) == normalized).first()
+    if not user and create:
+        user = Usuario(
             email=normalized,
-            nombre=(name or normalized)[:160],
-            rol="admin",
+            nombre=normalized,
+            proveedor="google",
             activo=True,
         )
+        db.session.add(user)
+        db.session.flush()
+    if not user:
+        raise click.ClickException("La cuenta no existe.")
+    return user
+
+
+def _membership(church, email):
+    user = _user(email)
+    membership = MembresiaIglesia.query.filter_by(
+        iglesia_id=church.id, usuario_id=user.id
+    ).first()
+    if not membership:
+        raise click.ClickException("La membresía no existe.")
+    return membership
+
+
+@churches_cli.command("create")
+@click.option("--nombre", required=True)
+@click.option("--slug", required=True)
+@click.option("--admin-email", required=True)
+def create_church(nombre, slug, admin_email):
+    name = str(nombre or "").strip()[:160]
+    normalized_slug = str(slug or "").strip().casefold()[:100]
+    if len(name) < 2 or not SLUG.fullmatch(normalized_slug):
+        raise click.ClickException("Nombre o slug inválido.")
+    church = Iglesia.query.filter_by(slug=normalized_slug).first()
+    if not church:
+        church = Iglesia(nombre=name, slug=normalized_slug, pais="Guatemala")
+        db.session.add(church)
+        db.session.flush()
+    user = _user(admin_email, create=True)
+    membership = MembresiaIglesia.query.filter_by(
+        usuario_id=user.id, iglesia_id=church.id
+    ).first()
+    if not membership:
+        membership = MembresiaIglesia(usuario=user, iglesia=church)
+        db.session.add(membership)
+    membership.rol = "admin"
+    membership.estado = "activo"
+    membership.fecha_aprobacion = membership.fecha_aprobacion or datetime.now()
+    record_audit(
+        church.id, "crear_iglesia", "iglesia", church.id, {"slug": church.slug}
     )
     db.session.commit()
-    click.echo(f"Administrador creado: {normalized}.")
+    click.echo(f"Iglesia lista: {church.slug}; administrador: {user.email}.")
 
 
-def _change_status(email, active):
-    user = _user(email)
-    if not user:
-        raise click.ClickException("La cuenta no existe.")
-    user.activo = active
+@churches_cli.command("list")
+def list_churches():
+    for church in Iglesia.query.order_by(Iglesia.nombre).all():
+        click.echo(
+            f"{church.slug}\t{church.nombre}\t{'activa' if church.activa else 'inactiva'}"
+        )
+
+
+@churches_cli.command("rename")
+@click.option("--slug", required=True)
+@click.option("--nombre", required=True)
+def rename_church(slug, nombre):
+    church = _church(slug)
+    name = str(nombre or "").strip()[:160]
+    if len(name) < 2:
+        raise click.ClickException("El nombre no es válido.")
+    church.nombre = name
     db.session.commit()
-    click.echo(f"Cuenta {'activada' if active else 'desactivada'}: {user.email}.")
+    click.echo(f"Iglesia actualizada: {church.slug}.")
 
 
-@users_cli.command("activate")
+@memberships_cli.command("create-admin")
+@click.option("--iglesia", required=True)
 @click.option("--email", required=True)
-def activate(email):
-    _change_status(email, True)
+def create_admin(iglesia, email):
+    church = _church(iglesia)
+    user = _user(email, create=True)
+    membership = MembresiaIglesia.query.filter_by(
+        usuario_id=user.id, iglesia_id=church.id
+    ).first()
+    if not membership:
+        membership = MembresiaIglesia(usuario=user, iglesia=church)
+        db.session.add(membership)
+    membership.rol = "admin"
+    membership.estado = "activo"
+    membership.fecha_aprobacion = membership.fecha_aprobacion or datetime.now()
+    record_audit(
+        church.id, "crear_admin", "membresia", membership.id, {"email": user.email}
+    )
+    db.session.commit()
+    click.echo(f"Administrador listo: {user.email} en {church.slug}.")
 
 
-@users_cli.command("deactivate")
-@click.option("--email", required=True)
-def deactivate(email):
-    _change_status(email, False)
-
-
-@users_cli.command("set-role")
+@memberships_cli.command("set-role")
+@click.option("--iglesia", required=True)
 @click.option("--email", required=True)
 @click.option("--role", type=click.Choice(["usuario", "admin"]), required=True)
-def set_role(email, role):
-    user = _user(email)
-    if not user:
-        raise click.ClickException("La cuenta no existe.")
-    if role == "usuario" and not user.persona:
-        raise click.ClickException(
-            "Vincula una persona antes de asignar el rol usuario."
-        )
-    user.rol = role
+def set_role(iglesia, email, role):
+    church = _church(iglesia)
+    membership = _membership(church, email)
+    previous = membership.rol
+    membership.rol = role
+    record_audit(
+        church.id,
+        "cambiar_rol",
+        "membresia",
+        membership.id,
+        {"rol_anterior": previous, "rol_nuevo": role},
+    )
     db.session.commit()
-    click.echo(f"Rol actualizado: {user.email} -> {role}.")
+    click.echo(f"Rol actualizado: {membership.usuario.email} -> {role}.")
 
 
-@users_cli.command("link-persona")
+def _set_state(iglesia, email, state):
+    church = _church(iglesia)
+    membership = _membership(church, email)
+    previous = membership.estado
+    membership.estado = state
+    if state == "activo":
+        membership.fecha_aprobacion = membership.fecha_aprobacion or datetime.now()
+    record_audit(
+        church.id,
+        f"membresia_{state}",
+        "membresia",
+        membership.id,
+        {"estado_anterior": previous},
+    )
+    db.session.commit()
+    click.echo(f"Membresía {state}: {membership.usuario.email}.")
+
+
+@memberships_cli.command("activate")
+@click.option("--iglesia", required=True)
+@click.option("--email", required=True)
+def activate_membership(iglesia, email):
+    _set_state(iglesia, email, "activo")
+
+
+@memberships_cli.command("suspend")
+@click.option("--iglesia", required=True)
+@click.option("--email", required=True)
+def suspend_membership(iglesia, email):
+    _set_state(iglesia, email, "suspendido")
+
+
+@memberships_cli.command("link-persona")
+@click.option("--iglesia", required=True)
 @click.option("--email", required=True)
 @click.option("--persona-id", type=int, required=True)
-def link_persona(email, persona_id):
-    user = _user(email)
-    person = db.session.get(Persona, persona_id)
-    if not user or not person:
-        raise click.ClickException("La cuenta o la persona no existe.")
-    if person.usuario and person.usuario.id != user.id:
-        raise click.ClickException("La persona ya está vinculada a otra cuenta.")
-    user.persona = person
+def link_persona(iglesia, email, persona_id):
+    church = _church(iglesia)
+    membership = _membership(church, email)
+    person = Persona.query.filter_by(id=persona_id, iglesia_id=church.id).first()
+    if not person:
+        raise click.ClickException("La persona no pertenece a esta iglesia.")
+    membership.persona = person
+    record_audit(
+        church.id,
+        "vincular_persona",
+        "membresia",
+        membership.id,
+        {"persona_id": person.id},
+    )
     db.session.commit()
-    click.echo(f"Cuenta {user.email} vinculada a persona {person.id}.")
+    click.echo(f"Membresía vinculada a persona {person.id}.")

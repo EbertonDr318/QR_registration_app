@@ -69,6 +69,13 @@ nav a {
 .account-menu form {
   margin: 0;
 }
+.account-menu select {
+  min-width: 150px;
+  padding: 7px 28px 7px 9px;
+}
+.church-name {
+  color: var(--muted);
+}
 .account-menu button {
   padding: 7px 9px;
 }
@@ -129,7 +136,7 @@ button {
 }
 .stats {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
   margin-bottom: 24px;
 }
@@ -382,6 +389,63 @@ dialog form {
 .alert.error {
   color: var(--bad);
   background: #fef3f2;
+}
+.alert.success {
+  color: var(--ok);
+  background: #ecfdf3;
+}
+.tenant-card {
+  width: min(560px, 100%);
+}
+.tenant-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+.tenant-option {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.tenant-option small {
+  display: block;
+  color: var(--muted);
+}
+.membership-actions {
+  display: grid;
+  gap: 8px;
+}
+.membership-actions form {
+  display: flex;
+  gap: 8px;
+}
+.membership-actions select {
+  min-width: 150px;
+}
+.pendiente {
+  color: #93370d;
+  background: #fffaeb;
+}
+.suspendido,
+.rechazado {
+  color: var(--bad);
+  background: #fef3f2;
+}
+.activo {
+  color: var(--ok);
+  background: #ecfdf3;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .qr-card {
   max-width: 520px;
