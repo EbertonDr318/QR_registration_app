@@ -58,18 +58,21 @@ def home():
     return render_template("account/home.html", **_account_context())
 
 
+@account.get("/mi-cuenta/qr")
 @account.get("/mi-qr")
 @linked_persona_required
 def my_qr_page():
     return render_template("account/qr.html", **_account_context())
 
 
+@account.get("/mi-cuenta/informacion")
 @account.get("/mi-informacion")
 @linked_persona_required
 def my_information():
     return render_template("account/information.html", **_account_context())
 
 
+@account.get("/mi-cuenta/eventos")
 @account.get("/mis-eventos")
 @linked_persona_required
 def my_events():

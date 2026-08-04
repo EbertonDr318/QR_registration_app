@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import urlparse
 
 from authlib.integrations.flask_client import OAuth
 from flask import Flask, jsonify
@@ -31,7 +32,8 @@ def create_app(test_config=None):
         database_uri = database_uri.replace("mysql://", "mysql+pymysql://", 1)
     is_production = os.getenv("APP_ENV") == "production"
     app.config.update(
-        SECRET_KEY=os.getenv("SECRET_KEY", "change-this-in-production"),
+        APP_ENV="production" if is_production else "development",
+        SECRET_KEY=os.getenv("SECRET_KEY") or "change-this-in-production",
         SQLALCHEMY_DATABASE_URI=database_uri,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         JSON_SORT_KEYS=False,
@@ -49,10 +51,20 @@ def create_app(test_config=None):
             "GOOGLE_DISCOVERY_URL",
             "https://accounts.google.com/.well-known/openid-configuration",
         ),
+        PUBLIC_BASE_URL=(
+            os.getenv("PUBLIC_BASE_URL") or "http://localhost:5000"
+        ).rstrip("/"),
         PREFERRED_URL_SCHEME="https" if is_production else "http",
     )
     if test_config:
         app.config.update(test_config)
+    if is_production and app.config["SECRET_KEY"] == "change-this-in-production":
+        raise RuntimeError("SECRET_KEY debe configurarse en producción.")
+    public_base_url = urlparse(app.config["PUBLIC_BASE_URL"])
+    if is_production and (
+        public_base_url.scheme != "https" or not public_base_url.netloc
+    ):
+        raise RuntimeError("PUBLIC_BASE_URL debe ser una URL HTTPS en producción.")
     if is_production:
         # Railway finaliza TLS en su proxy; se confía sólo en un salto conocido.
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)

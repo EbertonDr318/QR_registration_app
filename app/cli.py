@@ -55,11 +55,7 @@ def _membership(church, email):
     return membership
 
 
-@churches_cli.command("create")
-@click.option("--nombre", required=True)
-@click.option("--slug", required=True)
-@click.option("--admin-email", required=True)
-def create_church(nombre, slug, admin_email):
+def _bootstrap_church(nombre, slug, admin_email):
     name = str(nombre or "").strip()[:160]
     normalized_slug = str(slug or "").strip().casefold()[:100]
     if len(name) < 2 or not SLUG.fullmatch(normalized_slug):
@@ -84,6 +80,22 @@ def create_church(nombre, slug, admin_email):
     )
     db.session.commit()
     click.echo(f"Iglesia lista: {church.slug}; administrador: {user.email}.")
+
+
+@churches_cli.command("create")
+@click.option("--nombre", required=True)
+@click.option("--slug", required=True)
+@click.option("--admin-email", required=True)
+def create_church(nombre, slug, admin_email):
+    _bootstrap_church(nombre, slug, admin_email)
+
+
+@churches_cli.command("bootstrap")
+@click.option("--nombre", required=True)
+@click.option("--slug", required=True)
+@click.option("--admin-email", required=True)
+def bootstrap_church(nombre, slug, admin_email):
+    _bootstrap_church(nombre, slug, admin_email)
 
 
 @churches_cli.command("list")

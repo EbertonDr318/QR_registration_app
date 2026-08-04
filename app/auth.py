@@ -33,6 +33,16 @@ def _safe_next_url(target):
     return None
 
 
+def _google_callback_url():
+    base_url = current_app.config["PUBLIC_BASE_URL"]
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError("PUBLIC_BASE_URL no es una URL válida.")
+    if current_app.config.get("APP_ENV") == "production" and parsed.scheme != "https":
+        raise RuntimeError("PUBLIC_BASE_URL debe usar HTTPS en producción.")
+    return f"{base_url}{url_for('auth.google_callback')}"
+
+
 def _membership_destination(membership):
     return url_for("web.admin_dashboard" if membership.is_admin else "account.home")
 
@@ -108,7 +118,7 @@ def google_login():
     if not current_app.config.get("GOOGLE_CLIENT_ID"):
         flash("El acceso con Google todavía no está configurado.", "error")
         return redirect(url_for("auth.login"))
-    redirect_uri = url_for("auth.google_callback", _external=True)
+    redirect_uri = _google_callback_url()
     return oauth.google.authorize_redirect(redirect_uri)
 
 

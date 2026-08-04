@@ -3,7 +3,7 @@ from datetime import date, time, timedelta
 from pathlib import Path
 
 from app import create_app, db, login_manager
-from app.auth import authenticate_claims
+from app.auth import _google_callback_url, authenticate_claims
 from app.models import (
     Asistencia,
     Evento,
@@ -395,7 +395,7 @@ def test_cli_creates_church_and_admin_idempotently(app):
     runner = app.test_cli_runner()
     args = [
         "iglesias",
-        "create",
+        "bootstrap",
         "--nombre",
         "Principal",
         "--slug",
@@ -415,6 +415,15 @@ def test_cli_creates_church_and_admin_idempotently(app):
         assert MembresiaIglesia.query.one().is_admin
 
 
+def test_public_base_url_builds_exact_google_callback(app):
+    app.config["PUBLIC_BASE_URL"] = "https://example.up.railway.app"
+    with app.test_request_context():
+        assert (
+            _google_callback_url()
+            == "https://example.up.railway.app/auth/google/callback"
+        )
+
+
 def test_migration_assigns_existing_records_without_rotating_qr():
     path = Path("migrations/versions/8de9dc5a35bd_agregar_arquitectura_multiiglesia.py")
     migration = path.read_text(encoding="utf-8")
@@ -428,7 +437,9 @@ def test_migration_assigns_existing_records_without_rotating_qr():
 
 def test_production_configuration(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "test-only-production-secret")
     monkeypatch.setenv("DATABASE_URL", "mysql://user:password@host/database")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://example.up.railway.app")
     application = create_app()
     assert application.config["SESSION_COOKIE_SECURE"] is True
     assert application.config["SESSION_COOKIE_HTTPONLY"] is True

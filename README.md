@@ -88,6 +88,7 @@ DATABASE_URL=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_DISCOVERY_URL=https://accounts.google.com/.well-known/openid-configuration
+PUBLIC_BASE_URL=http://localhost:5000
 ```
 
 `DATABASE_URL` tiene prioridad. Si no se define, la aplicación utiliza
@@ -115,7 +116,7 @@ global por membresías.
 ### 5. Primera iglesia y administrador
 
 ```bash
-flask --app wsgi:app iglesias create \
+flask --app wsgi:app iglesias bootstrap \
   --nombre "Iglesia Principal" \
   --slug "iglesia-principal" \
   --admin-email administrador@example.com
@@ -208,6 +209,7 @@ DATABASE_URL=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_DISCOVERY_URL=https://accounts.google.com/.well-known/openid-configuration
+PUBLIC_BASE_URL=https://qrregistrationapp-production.up.railway.app
 ```
 
 Después del despliegue ejecuta manualmente:
