@@ -1,167 +1,249 @@
-# QR Registration App — Producción
+# RMS — Registro y asistencia QR multiiglesia
 
-Aplicación real de registro de personas y control de asistencia mediante QR, desarrollada con Flask, MySQL, SQLAlchemy y Gunicorn. Este repositorio no contiene la demostración de GitHub Pages.
+Aplicación Flask de producción para administrar personas, eventos y asistencias
+mediante QR. Varias iglesias pueden utilizar la misma plataforma con aislamiento
+estricto de datos por tenant.
 
-Repositorio: https://github.com/EbertonDr318/QR_registration_app
-
-Demo estático de referencia: https://ebertondr318.github.io/DEMO_QR_registration_app/
+Repositorio: `EbertonDr318/QR_registration_app`
 
 ## Arquitectura
 
-- `app/models.py`: personas, eventos y asistencias.
-- `app/api.py`: API REST, validación, QR y reportes.
-- `app/web.py`: vistas HTML.
-- `app/templates/` y `app/static/`: interfaz Flask.
-- `wsgi.py`: punto de entrada WSGI.
-- `railway.toml`: única fuente del comando de inicio Railway.
-- `schema.sql`: creación inicial del esquema MySQL.
+- `Usuario`: identidad global autenticada por Google. No almacena rol global,
+  contraseña ni tokens OAuth.
+- `Iglesia`: tenant independiente de la plataforma.
+- `MembresiaIglesia`: relación entre Usuario e Iglesia; contiene rol, estado y
+  la Persona vinculada dentro de esa iglesia.
+- `Persona`: perfil operativo perteneciente a una iglesia.
+- `Evento` y `Asistencia`: registros pertenecientes a una iglesia.
+- `RegistroAuditoria`: historial seguro de acciones administrativas relevantes.
+
+```text
+Usuario
+  └── MembresiaIglesia
+        ├── Iglesia
+        └── Persona
+
+Iglesia
+  ├── Personas
+  ├── Eventos
+  └── Asistencias
+```
+
+El identificador de la iglesia seleccionada se guarda en la sesión, pero cada
+solicitud vuelve a validar en la base que la iglesia esté activa y que el
+Usuario posea una membresía activa. Las consultas administrativas siempre se
+filtran por ese contexto validado.
 
 ## Funcionalidades
 
-- Administración de personas, estados y códigos internos únicos.
-- Tokens QR aleatorios generados en el backend.
-- Creación, apertura y cierre de eventos.
-- Registro de asistencia manual o por QR con protección contra duplicados.
-- Dashboard, historial, filtros y reportes CSV, Excel y PDF en memoria.
+- Una sola pantalla de login con “Continuar con Google”.
+- Usuario global con múltiples membresías.
+- Rol `usuario` o `admin` diferente en cada iglesia.
+- Selector automático cuando existe una membresía activa y selector visible
+  cuando existen varias.
+- Onboarding para solicitar acceso a una iglesia.
+- Panel personal, QR propio e historial limitado a la Persona vinculada.
+- Dashboard, personas, eventos, escáner, asistencias y reportes aislados por
+  iglesia.
+- Administración y auditoría de membresías.
+- CSV, Excel y PDF generados exclusivamente con datos del tenant actual.
 - Endpoint público `GET /health`.
 
 ## Instalación local
 
-### Requisitos previos
-
-Antes de comenzar, asegúrate de tener instalado:
+### Requisitos
 
 - Git.
-- Python 3.12 o una versión compatible.
-- MySQL 8 o una versión compatible.
-- Una terminal o consola de comandos.
+- Python 3.12 o compatible.
+- MySQL 8 o compatible.
 
-### 1. Clonar el repositorio
+### 1. Clonar y crear el entorno
 
 ```bash
 git clone https://github.com/EbertonDr318/QR_registration_app.git
 cd QR_registration_app
-```
-
-### 2. Crear y activar el entorno virtual
-
-En macOS o Linux:
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-En Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-En Windows Command Prompt:
-
-```bat
-python -m venv .venv
-.venv\Scripts\activate.bat
-```
-
-### 3. Instalar las dependencias
-
-```bash
 python -m pip install -r requirements.txt
 ```
 
-### 4. Configurar las variables de entorno
+En Windows PowerShell, activa el entorno con:
 
-En macOS o Linux:
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### 2. Variables de entorno
 
 ```bash
 cp .env.example .env
 ```
 
-En Windows:
+Configura `.env` localmente. Nunca lo agregues a Git:
 
-```bat
-copy .env.example .env
+```env
+APP_ENV=development
+SECRET_KEY=
+DATABASE_URL=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_DISCOVERY_URL=https://accounts.google.com/.well-known/openid-configuration
+PUBLIC_BASE_URL=http://localhost:5000
 ```
 
-Abre el archivo `.env` y configura la conexión a MySQL. No utilices las
-credenciales de ejemplo en un entorno real.
+`DATABASE_URL` tiene prioridad. Si no se define, la aplicación utiliza
+`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`.
 
-### 5. Crear la base de datos
-
-En macOS, Linux o Git Bash:
+### 3. Base nueva
 
 ```bash
 mysql -u root -p < schema.sql
+flask --app wsgi:app db stamp head
 ```
 
-En Windows PowerShell:
+### 4. Instalación existente
 
-```powershell
-cmd /c "mysql -u root -p < schema.sql"
+No vuelvas a importar `schema.sql`. Realiza un respaldo y aplica:
+
+```bash
+flask --app wsgi:app db upgrade
 ```
 
-El comando solicitará la contraseña del usuario de MySQL.
+La migración crea `Iglesia Principal`, asigna allí las personas, eventos y
+asistencias existentes, conserva IDs, códigos y tokens QR, y reemplaza el rol
+global por membresías.
 
-### 6. Ejecutar la aplicación
+### 5. Primera iglesia y administrador
+
+```bash
+flask --app wsgi:app iglesias bootstrap \
+  --nombre "Iglesia Principal" \
+  --slug "iglesia-principal" \
+  --admin-email administrador@example.com
+```
+
+El comando es idempotente. También puedes crear otro administrador:
+
+```bash
+flask --app wsgi:app membresias create-admin \
+  --iglesia iglesia-principal \
+  --email administrador@example.com
+```
+
+Ningún usuario puede convertirse en administrador desde el navegador.
+
+### 6. Ejecutar
 
 ```bash
 python run.py
 ```
 
-Abre `http://127.0.0.1:5000` en el navegador. Para detener el servidor,
-presiona `Ctrl+C`.
+Abre `http://localhost:5000`.
 
-## Variables
+## Flujo de Google OAuth
 
-`DATABASE_URL` tiene prioridad. Si está vacía, se construye la conexión MySQL con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`. En producción configura además `APP_ENV=production`, una `SECRET_KEY` aleatoria y `PORT`.
+1. El visitante pulsa “Continuar con Google”.
+2. Google devuelve claims OpenID Connect verificados.
+3. El backend exige `email_verified=true` y busca por `sub`, después por correo.
+4. Si el Usuario no existe, crea únicamente la identidad global.
+5. Una membresía activa se selecciona automáticamente.
+6. Varias membresías activas llevan a `/seleccionar-iglesia`.
+7. Sin membresías, el Usuario llega a `/unirse`.
 
-No se utiliza SQLite silenciosamente: sólo las pruebas automatizadas inyectan SQLite en memoria de forma explícita.
+Durante onboarding:
 
-## API principal
+- Una única Persona activa con el mismo correo dentro de la iglesia crea una
+  membresía `usuario` activa y vinculada.
+- Ninguna coincidencia o varias coincidencias generan una solicitud pendiente.
+- Nunca se asigna el rol `admin` automáticamente.
 
-- `/api/personas`
-- `/api/eventos`
-- `/api/asistencias`
-- `/api/asistencias/registrar`
-- `/api/asistencias/exportar`
-- `/api/asistencias/exportar.xlsx`
-- `/api/asistencias/exportar.pdf`
-- `/health`
+## Google Cloud
+
+Configura una aplicación OAuth web con estos callbacks exactos:
+
+```text
+http://localhost:5000/auth/google/callback
+http://127.0.0.1:5000/auth/google/callback
+https://qrregistrationapp-production.up.railway.app/auth/google/callback
+```
+
+Origen JavaScript autorizado de producción:
+
+```text
+https://qrregistrationapp-production.up.railway.app
+```
+
+Guarda Client ID y Client Secret únicamente como variables del servicio Flask.
+
+## Comandos administrativos
+
+```bash
+flask --app wsgi:app iglesias list
+flask --app wsgi:app iglesias rename --slug iglesia-principal --nombre "Nuevo nombre"
+flask --app wsgi:app membresias set-role --iglesia iglesia-principal --email correo@example.com --role usuario
+flask --app wsgi:app membresias activate --iglesia iglesia-principal --email correo@example.com
+flask --app wsgi:app membresias suspend --iglesia iglesia-principal --email correo@example.com
+flask --app wsgi:app membresias link-persona --iglesia iglesia-principal --email correo@example.com --persona-id 123
+```
+
+Las solicitudes pendientes también se administran desde `/admin/membresias`.
+
+## Migraciones
+
+```bash
+flask --app wsgi:app db upgrade
+flask --app wsgi:app db migrate -m "descripcion"
+```
+
+Revisa manualmente cada migración antes de aplicarla. No ejecutes
+`db.drop_all()`, `DROP DATABASE` ni sustituyas una base existente.
+
+## Railway
+
+Configura en el servicio de la aplicación Flask, no en el servicio MySQL:
+
+```env
+APP_ENV=production
+SECRET_KEY=
+DATABASE_URL=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_DISCOVERY_URL=https://accounts.google.com/.well-known/openid-configuration
+PUBLIC_BASE_URL=https://qrregistrationapp-production.up.railway.app
+```
+
+Después del despliegue ejecuta manualmente:
+
+```bash
+flask --app wsgi:app db upgrade
+```
+
+Gunicorn continúa utilizando `$PORT` desde `railway.toml`. Las migraciones no se
+ejecutan automáticamente durante el inicio.
+
+## Seguridad
+
+- Cookies `HttpOnly`, `SameSite=Lax` y `Secure` en producción.
+- Protección fuerte de sesión Flask-Login.
+- CSRF en formularios y solicitudes `fetch`.
+- OAuth `state` administrado por Authlib.
+- Sin contraseñas ni tokens OAuth almacenados.
+- Sin `qr_token` en respuestas JSON, HTML o JavaScript.
+- Sin roles ni `iglesia_id` confiados desde el frontend.
+- Recursos de otros tenants responden 404 o 403 según corresponda.
+- Auditoría sin secretos, cookies ni tokens QR completos.
 
 ## Pruebas
+
+Las pruebas simulan OpenID Connect y utilizan SQLite en memoria explícitamente:
 
 ```bash
 pytest -q
 ```
 
-## Gunicorn
-
-```bash
-gunicorn wsgi:app --bind 127.0.0.1:8000
-```
-
-Railway utiliza:
-
-```bash
-gunicorn wsgi:app --bind 0.0.0.0:$PORT
-```
-
-## Base de datos y migraciones
-
-El esquema inicial está en `schema.sql`. Antes de cambios incompatibles debe incorporarse Flask-Migrate/Alembic; actualmente no existe un historial de migraciones versionado.
-
-## Seguridad
-
-Implementado: validación backend, ORM, tokens QR impredecibles, restricciones únicas, cookies `HttpOnly`/`SameSite`, cookies `Secure` en producción y errores sin trazas públicas.
-
-Pendientes críticos antes de uso con datos reales: autenticación, cierre de sesión, hash de contraseñas, roles, CSRF, autorización de rutas, auditoría administrativa, rate limiting y rotación de secretos.
-
-## Railway
-
-Consulta [DEPLOYMENT_RAILWAY.md](DEPLOYMENT_RAILWAY.md). El repositorio está preparado, pero Railway no ha sido conectado.
+Cubren login, onboarding, múltiples membresías, roles por iglesia, suspensión,
+IDOR, aislamiento de personas/eventos/asistencias/reportes, QR propio, CSRF,
+logout, CLI y conservación de datos en la migración.
 
 ## Licencia
 

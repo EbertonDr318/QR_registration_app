@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Mis eventos · RMS{% endblock %}
+
+{% block content %}
+  <div class="heading">
+    <div>
+      <p class="eyebrow">PARTICIPACIÓN</p>
+      <h1>Mis eventos</h1>
+    </div>
+  </div>
+  <section class="grid">
+    <article class="panel">
+      <h2>Asistidos</h2>
+      {% for item in asistencias %}
+        <div class="event">
+          <div>
+            <b>{{ item.evento.nombre }}</b>
+            <small>{{ item.fecha_hora.strftime('%d/%m/%Y %H:%M') }}</small>
+          </div>
+        </div>
+      {% else %}
+        <p class="empty">Sin asistencias.</p>
+      {% endfor %}
+    </article>
+    <article class="panel">
+      <h2>Próximos</h2>
+      {% for evento in proximos %}
+        <div class="event">
+          <div>
+            <b>{{ evento.nombre }}</b>
+            <small>
+              {{ evento.fecha.strftime('%d/%m/%Y') }} ·
+              {{ evento.sede or 'General' }}
+            </small>
+          </div>
+        </div>
+      {% else %}
+        <p class="empty">Sin próximos eventos.</p>
+      {% endfor %}
+    </article>
+  </section>
+{% endblock %}

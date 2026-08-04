@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Acceso denegado · RMS{% endblock %}
+
+{% block content %}
+  <section class="login-card">
+    <p class="eyebrow">ERROR 403</p>
+    <h1>Acceso denegado</h1>
+    <p>Tu cuenta no tiene permisos para abrir esta sección.</p>
+    <a class="button" href="{{ url_for('web.entrypoint') }}">Volver al inicio</a>
+  </section>
+{% endblock %}

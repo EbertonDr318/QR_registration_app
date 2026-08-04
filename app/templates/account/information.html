@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Mi información · RMS{% endblock %}
+
+{% block content %}
+  <div class="heading">
+    <div>
+      <p class="eyebrow">PERFIL</p>
+      <h1>Mi información</h1>
+    </div>
+  </div>
+  <section class="panel profile-details">
+    <dl>
+      <dt>Código</dt><dd>{{ persona.codigo }}</dd>
+      <dt>Iglesia</dt><dd>{{ iglesia.nombre }}</dd>
+      <dt>Nombre</dt><dd>{{ persona.nombres }} {{ persona.apellidos }}</dd>
+      <dt>Correo</dt><dd>{{ persona.correo or '—' }}</dd>
+      <dt>Teléfono</dt><dd>{{ persona.telefono or '—' }}</dd>
+      <dt>Sede</dt><dd>{{ persona.sede or '—' }}</dd>
+      <dt>Grupo</dt><dd>{{ persona.grupo or '—' }}</dd>
+    </dl>
+  </section>
+{% endblock %}

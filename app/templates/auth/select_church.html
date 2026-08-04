@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Seleccionar iglesia · RMS{% endblock %}
+
+{% block content %}
+  <section class="login-card tenant-card">
+    <p class="eyebrow">SELECCIONAR IGLESIA</p>
+    <h1>¿A qué iglesia deseas ingresar?</h1>
+    <div class="tenant-list">
+      {% for membership in memberships %}
+        <form method="post" action="{{ url_for('auth.select_church_post') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <input type="hidden" name="iglesia_id" value="{{ membership.iglesia_id }}" />
+          <button class="tenant-option" type="submit">
+            <b>{{ membership.iglesia.nombre }}</b>
+            <small>{{ membership.iglesia.ciudad or '' }} · {{ membership.rol }}</small>
+          </button>
+        </form>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

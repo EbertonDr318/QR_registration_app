@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar sesión · RMS{% endblock %}
+
+{% block content %}
+  <section class="login-card">
+    <p class="eyebrow">ACCESO SEGURO</p>
+    <h1>Asistencia QR</h1>
+    <p>Usa la cuenta de Google autorizada por tu organización.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <p class="alert {{ category }}">{{ message }}</p>
+      {% endfor %}
+    {% endwith %}
+    <a class="button google-button" href="{{ url_for('auth.google_login') }}">
+      Continuar con Google
+    </a>
+    <small>El rol y los permisos se consultan en el servidor.</small>
+  </section>
+{% endblock %}
