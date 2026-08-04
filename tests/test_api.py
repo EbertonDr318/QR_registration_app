@@ -235,6 +235,9 @@ def test_regular_user_only_sees_membership_person_and_own_qr(client, app, church
     assert own_pdf.status_code == 200
     assert own_pdf.mimetype == "application/pdf"
     assert own_pdf.data.startswith(b"%PDF")
+    qr_page = client.get("/mi-cuenta/qr")
+    assert b"Grupo: A" in qr_page.data
+    assert b"UX-USER" not in qr_page.data
     assert client.get(f"/api/personas/{other_id}").status_code == 403
 
 
@@ -247,12 +250,24 @@ def test_regular_user_updates_only_own_safe_profile_fields(client, app, churches
         create_membership(user, church, own)
         own_id, other_id = own.id, other.id
         login(client, user, church)
+    invalid = client.post(
+        "/mi-cuenta/informacion",
+        data={
+            "nombres": "Nombre Editado",
+            "apellidos": "Usuario",
+            "telefono": "ABC123",
+            "grupo": "Jovenes",
+        },
+    )
+    assert invalid.status_code == 302
+    with app.app_context():
+        assert db.session.get(Persona, own_id).telefono is None
     response = client.post(
         "/mi-cuenta/informacion",
         data={
             "nombres": "Nombre Editado",
             "apellidos": "Usuario",
-            "telefono": "5555-0101",
+            "telefono": "55550101",
             "sede": "Centro",
             "grupo": "Jovenes",
             "codigo": "ALTERADO",
@@ -263,6 +278,7 @@ def test_regular_user_updates_only_own_safe_profile_fields(client, app, churches
     with app.app_context():
         own = db.session.get(Persona, own_id)
         assert own.nombres == "Nombre Editado"
+        assert own.grupo == "Jóvenes"
         assert own.codigo == "UX-USER-010"
         assert own.correo == "own@example.test"
         assert db.session.get(Persona, other_id).nombres == "Otra"
@@ -275,9 +291,20 @@ def test_admin_created_people_receive_next_tenant_code(client, app, churches):
         admin_user = create_user()
         create_membership(admin_user, church, rol="admin")
         login(client, admin_user, church)
+    invalid = client.post(
+        "/api/personas",
+        json={
+            "nombres": "Registro",
+            "apellidos": "Inválido",
+            "telefono": "TEL-123",
+            "grupo": "Niños",
+        },
+    )
+    assert invalid.status_code == 400
+    assert invalid.get_json()["errors"]["telefono"] == "Solo se permiten números"
     response = client.post(
         "/api/personas",
-        json={"nombres": "Menor", "apellidos": "Sin celular", "grupo": "Pre adolescentes"},
+        json={"nombres": "Menor", "apellidos": "Sin celular", "grupo": "Adolescentes"},
     )
     assert response.status_code == 201
     assert response.get_json()["data"]["codigo"] == "UX-USER-005"
