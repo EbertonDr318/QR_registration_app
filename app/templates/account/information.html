@@ -15,6 +15,7 @@
       <label>Nombres<input name="nombres" value="{{ persona.nombres }}" maxlength="80" required /></label>
       <label>Apellidos<input name="apellidos" value="{{ persona.apellidos }}" maxlength="80" required /></label>
       <label>Teléfono<input name="telefono" value="{{ persona.telefono or '' }}" maxlength="25" inputmode="numeric" pattern="[0-9]*" /></label>
+      <label>Fecha de nacimiento<input name="fecha_nacimiento" type="date" value="{{ persona.fecha_nacimiento.isoformat() if persona.fecha_nacimiento else '' }}" /></label>
       <label>Sede<input name="sede" value="{{ persona.sede or '' }}" maxlength="80" /></label>
       <label>Grupo
         <select name="grupo">

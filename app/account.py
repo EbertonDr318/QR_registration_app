@@ -7,7 +7,7 @@ from .models import Asistencia, Evento
 from . import db
 from .audit import record_audit
 from .services.qr_documents import build_qr_card_pdf
-from .profile_fields import GROUPS, normalize_group, valid_phone
+from .profile_fields import GROUPS, normalize_group, parse_birth_date, valid_phone
 from .permissions import (
     get_current_iglesia,
     get_current_membership,
@@ -83,8 +83,18 @@ def update_my_information():
     """Permite editar solo los datos personales no privilegiados de la ficha propia."""
     membership = get_current_membership()
     person = membership.persona
-    fields = {"nombres": 80, "apellidos": 80, "telefono": 25, "sede": 80, "grupo": 80}
-    values = {key: str(request.form.get(key) or "").strip()[:limit] for key, limit in fields.items()}
+    fields = {
+        "nombres": 80,
+        "apellidos": 80,
+        "telefono": 25,
+        "fecha_nacimiento": 10,
+        "sede": 80,
+        "grupo": 80,
+    }
+    values = {
+        key: str(request.form.get(key) or "").strip()[:limit]
+        for key, limit in fields.items()
+    }
     if not values["nombres"] or not values["apellidos"]:
         flash("Nombre y apellidos son obligatorios.", "error")
         return redirect(url_for("account.my_information"))
@@ -96,6 +106,11 @@ def update_my_information():
         flash("Selecciona un grupo válido.", "error")
         return redirect(url_for("account.my_information"))
     values["grupo"] = group or ""
+    try:
+        values["fecha_nacimiento"] = parse_birth_date(values["fecha_nacimiento"])
+    except ValueError:
+        flash("La fecha de nacimiento no es válida.", "error")
+        return redirect(url_for("account.my_information"))
     for key, value in values.items():
         setattr(person, key, value or None)
     record_audit(person.iglesia_id, "actualizar_perfil_propio", "persona", person.id)
